@@ -1,0 +1,193 @@
+{
+  "format": "guitar-wiring-simulator",
+  "version": 1,
+  "components": [
+    {
+      "id": 1,
+      "kind": "switch",
+      "name": "",
+      "x": 211.0,
+      "y": 304.5,
+      "properties": {
+        "switch_type": "custom:Toggle On-On"
+      },
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 270
+    },
+    {
+      "id": 2,
+      "kind": "pickup",
+      "name": "",
+      "x": 158.0,
+      "y": 128.5,
+      "properties": {
+        "pickup_type": "humbucker",
+        "resistance": "10",
+        "resistance_unit": "kΩ",
+        "inductance": "8",
+        "inductance_unit": "H",
+        "output_sensitivity": "100"
+      },
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 0
+    },
+    {
+      "id": 3,
+      "kind": "jack",
+      "name": "",
+      "x": 409.0,
+      "y": 437.5,
+      "properties": {
+        "jack_type": "mono"
+      },
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 270
+    },
+    {
+      "id": 4,
+      "kind": "ground",
+      "name": "",
+      "x": 430.0,
+      "y": 220.5,
+      "properties": {},
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 270
+    }
+  ],
+  "wires": [
+    {
+      "id": 1,
+      "color": "black",
+      "start": {
+        "type": "terminal",
+        "component_id": 2,
+        "terminal": "south_gnd"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 4,
+        "terminal": "gnd"
+      },
+      "nodes": []
+    },
+    {
+      "id": 2,
+      "color": "black",
+      "start": {
+        "type": "terminal",
+        "component_id": 3,
+        "terminal": "gnd"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 4,
+        "terminal": "gnd"
+      },
+      "nodes": []
+    },
+    {
+      "id": 6,
+      "color": "green",
+      "start": {
+        "type": "terminal",
+        "component_id": 2,
+        "terminal": "north_hot"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 3,
+        "terminal": "hot"
+      },
+      "nodes": [
+        [
+          127,
+          388
+        ]
+      ]
+    },
+    {
+      "id": 10,
+      "color": "red",
+      "start": {
+        "type": "terminal",
+        "component_id": 2,
+        "terminal": "south_hot"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 1,
+        "terminal": "custom_3"
+      },
+      "nodes": []
+    },
+    {
+      "id": 11,
+      "color": "red",
+      "start": {
+        "type": "terminal",
+        "component_id": 1,
+        "terminal": "custom_5"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 3,
+        "terminal": "hot"
+      },
+      "nodes": [
+        [
+          325,
+          225
+        ]
+      ]
+    },
+    {
+      "id": 12,
+      "color": "black",
+      "start": {
+        "type": "terminal",
+        "component_id": 2,
+        "terminal": "north_gnd"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 1,
+        "terminal": "custom_2"
+      },
+      "nodes": []
+    },
+    {
+      "id": 14,
+      "color": "black",
+      "start": {
+        "type": "terminal",
+        "component_id": 1,
+        "terminal": "custom_1"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 1,
+        "terminal": "custom_0"
+      },
+      "nodes": []
+    },
+    {
+      "id": 15,
+      "color": "black",
+      "start": {
+        "type": "terminal",
+        "component_id": 1,
+        "terminal": "custom_4"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 4,
+        "terminal": "gnd"
+      },
+      "nodes": []
+    }
+  ]
+}

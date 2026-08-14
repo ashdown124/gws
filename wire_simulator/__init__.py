@@ -1,0 +1,1 @@
+"""Guitar wiring simulator package."""

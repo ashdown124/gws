@@ -1,0 +1,462 @@
+{
+  "format": "guitar-wiring-simulator",
+  "version": 1,
+  "components": [
+    {
+      "id": 1,
+      "kind": "pickup",
+      "name": "Neck",
+      "x": 183.0,
+      "y": 78.5,
+      "properties": {
+        "pickup_type": "single",
+        "resistance": "7",
+        "resistance_unit": "kΩ",
+        "inductance": "4",
+        "inductance_unit": "H",
+        "output_sensitivity": "100"
+      },
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 0
+    },
+    {
+      "id": 2,
+      "kind": "pickup",
+      "name": "Middle",
+      "x": 242.0,
+      "y": 167.5,
+      "properties": {
+        "pickup_type": "single",
+        "resistance": "7",
+        "resistance_unit": "kΩ",
+        "inductance": "4",
+        "inductance_unit": "H",
+        "output_sensitivity": "100"
+      },
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 0
+    },
+    {
+      "id": 3,
+      "kind": "pickup",
+      "name": "Bridge",
+      "x": 259.0,
+      "y": 277.5,
+      "properties": {
+        "pickup_type": "single",
+        "resistance": "7",
+        "resistance_unit": "kΩ",
+        "inductance": "4",
+        "inductance_unit": "H",
+        "output_sensitivity": "100"
+      },
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 0
+    },
+    {
+      "id": 4,
+      "kind": "switch",
+      "name": "",
+      "x": 200.0,
+      "y": 561.5,
+      "properties": {
+        "switch_type": "blade_5way"
+      },
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 0
+    },
+    {
+      "id": 5,
+      "kind": "potentiometer",
+      "name": "",
+      "x": 407.0,
+      "y": 401.0,
+      "properties": {
+        "resistance": "500",
+        "resistance_unit": "kΩ",
+        "taper": "audio_taper"
+      },
+      "gauge_value": 0,
+      "switch_position": 1,
+      "rotation": 0
+    },
+    {
+      "id": 6,
+      "kind": "ground",
+      "name": "",
+      "x": 465.0,
+      "y": 149.5,
+      "properties": {},
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 270
+    },
+    {
+      "id": 7,
+      "kind": "jack",
+      "name": "",
+      "x": 614.0,
+      "y": 411.5,
+      "properties": {
+        "jack_type": "mono"
+      },
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 180
+    },
+    {
+      "id": 8,
+      "kind": "capacitor",
+      "name": "",
+      "x": 369.0,
+      "y": 587.5,
+      "properties": {
+        "capacitance": "47",
+        "capacitance_unit": "nF"
+      },
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 0
+    },
+    {
+      "id": 9,
+      "kind": "capacitor",
+      "name": "",
+      "x": 368.0,
+      "y": 676.5,
+      "properties": {
+        "capacitance": "47",
+        "capacitance_unit": "nF"
+      },
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 0
+    },
+    {
+      "id": 10,
+      "kind": "potentiometer",
+      "name": "",
+      "x": 484.0,
+      "y": 546.0,
+      "properties": {
+        "resistance": "500",
+        "resistance_unit": "kΩ",
+        "taper": "audio_taper"
+      },
+      "gauge_value": 0,
+      "switch_position": 1,
+      "rotation": 180
+    },
+    {
+      "id": 11,
+      "kind": "potentiometer",
+      "name": "",
+      "x": 499.0,
+      "y": 662.0,
+      "properties": {
+        "resistance": "500",
+        "resistance_unit": "kΩ",
+        "taper": "audio_taper"
+      },
+      "gauge_value": 0,
+      "switch_position": 1,
+      "rotation": 180
+    }
+  ],
+  "wires": [
+    {
+      "id": 1,
+      "color": "yellow",
+      "start": {
+        "type": "terminal",
+        "component_id": 3,
+        "terminal": "single_hot"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 4,
+        "terminal": "A1"
+      },
+      "nodes": [
+        [
+          149.0,
+          446.0
+        ]
+      ]
+    },
+    {
+      "id": 2,
+      "color": "green",
+      "start": {
+        "type": "terminal",
+        "component_id": 2,
+        "terminal": "single_hot"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 4,
+        "terminal": "A2"
+      },
+      "nodes": [
+        [
+          92.0,
+          403.0
+        ]
+      ]
+    },
+    {
+      "id": 3,
+      "color": "red",
+      "start": {
+        "type": "terminal",
+        "component_id": 1,
+        "terminal": "single_hot"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 4,
+        "terminal": "A3"
+      },
+      "nodes": [
+        [
+          39.0,
+          396.0
+        ]
+      ]
+    },
+    {
+      "id": 4,
+      "color": "black",
+      "start": {
+        "type": "terminal",
+        "component_id": 4,
+        "terminal": "A0"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 4,
+        "terminal": "B0"
+      },
+      "nodes": []
+    },
+    {
+      "id": 5,
+      "color": "blue",
+      "start": {
+        "type": "terminal",
+        "component_id": 4,
+        "terminal": "B0"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 5,
+        "terminal": "1"
+      },
+      "nodes": []
+    },
+    {
+      "id": 6,
+      "color": "black",
+      "start": {
+        "type": "terminal",
+        "component_id": 1,
+        "terminal": "single_gnd"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 6,
+        "terminal": "gnd"
+      },
+      "nodes": []
+    },
+    {
+      "id": 7,
+      "color": "black",
+      "start": {
+        "type": "terminal",
+        "component_id": 2,
+        "terminal": "single_gnd"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 6,
+        "terminal": "gnd"
+      },
+      "nodes": [
+        [
+          330,
+          211
+        ]
+      ]
+    },
+    {
+      "id": 8,
+      "color": "black",
+      "start": {
+        "type": "terminal",
+        "component_id": 3,
+        "terminal": "single_gnd"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 6,
+        "terminal": "gnd"
+      },
+      "nodes": [
+        [
+          365,
+          315
+        ]
+      ]
+    },
+    {
+      "id": 10,
+      "color": "blue",
+      "start": {
+        "type": "terminal",
+        "component_id": 5,
+        "terminal": "2"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 7,
+        "terminal": "hot"
+      },
+      "nodes": []
+    },
+    {
+      "id": 11,
+      "color": "black",
+      "start": {
+        "type": "terminal",
+        "component_id": 6,
+        "terminal": "gnd"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 7,
+        "terminal": "gnd"
+      },
+      "nodes": []
+    },
+    {
+      "id": 12,
+      "color": "black",
+      "start": {
+        "type": "terminal",
+        "component_id": 6,
+        "terminal": "gnd"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 5,
+        "terminal": "3"
+      },
+      "nodes": []
+    },
+    {
+      "id": 13,
+      "color": "gray",
+      "start": {
+        "type": "terminal",
+        "component_id": 4,
+        "terminal": "B2"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 8,
+        "terminal": "1"
+      },
+      "nodes": []
+    },
+    {
+      "id": 14,
+      "color": "gray",
+      "start": {
+        "type": "terminal",
+        "component_id": 4,
+        "terminal": "B3"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 9,
+        "terminal": "1"
+      },
+      "nodes": []
+    },
+    {
+      "id": 15,
+      "color": "gray",
+      "start": {
+        "type": "terminal",
+        "component_id": 8,
+        "terminal": "2"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 10,
+        "terminal": "3"
+      },
+      "nodes": []
+    },
+    {
+      "id": 16,
+      "color": "gray",
+      "start": {
+        "type": "terminal",
+        "component_id": 9,
+        "terminal": "2"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 11,
+        "terminal": "3"
+      },
+      "nodes": []
+    },
+    {
+      "id": 17,
+      "color": "black",
+      "start": {
+        "type": "terminal",
+        "component_id": 10,
+        "terminal": "2"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 7,
+        "terminal": "gnd"
+      },
+      "nodes": [
+        [
+          520,
+          474
+        ]
+      ]
+    },
+    {
+      "id": 18,
+      "color": "black",
+      "start": {
+        "type": "terminal",
+        "component_id": 11,
+        "terminal": "2"
+      },
+      "end": {
+        "type": "wire_node",
+        "wire_id": 17,
+        "node": 0
+      },
+      "nodes": [
+        [
+          606,
+          576
+        ]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,219 @@
+{
+  "format": "guitar-wiring-simulator",
+  "version": 1,
+  "components": [
+    {
+      "id": 1,
+      "kind": "pickup",
+      "name": "",
+      "x": 114.0,
+      "y": 121.5,
+      "properties": {
+        "pickup_type": "single",
+        "resistance": "7",
+        "resistance_unit": "kΩ",
+        "inductance": "4",
+        "inductance_unit": "H",
+        "output_sensitivity": "100"
+      },
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 0
+    },
+    {
+      "id": 2,
+      "kind": "potentiometer",
+      "name": "",
+      "x": 145.0,
+      "y": 258.0,
+      "properties": {
+        "resistance": "500",
+        "resistance_unit": "kΩ",
+        "taper": "audio_taper"
+      },
+      "gauge_value": 0,
+      "switch_position": 1,
+      "rotation": 0
+    },
+    {
+      "id": 3,
+      "kind": "potentiometer",
+      "name": "",
+      "x": 356.0,
+      "y": 303.0,
+      "properties": {
+        "resistance": "500",
+        "resistance_unit": "kΩ",
+        "taper": "audio_taper"
+      },
+      "gauge_value": 0,
+      "switch_position": 1,
+      "rotation": 180
+    },
+    {
+      "id": 4,
+      "kind": "capacitor",
+      "name": "",
+      "x": 241.0,
+      "y": 317.5,
+      "properties": {
+        "capacitance": "47",
+        "capacitance_unit": "nF"
+      },
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 0
+    },
+    {
+      "id": 5,
+      "kind": "ground",
+      "name": "",
+      "x": 470.0,
+      "y": 147.5,
+      "properties": {},
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 270
+    },
+    {
+      "id": 6,
+      "kind": "jack",
+      "name": "",
+      "x": 496.0,
+      "y": 365.5,
+      "properties": {
+        "jack_type": "mono"
+      },
+      "gauge_value": 50,
+      "switch_position": 1,
+      "rotation": 180
+    }
+  ],
+  "wires": [
+    {
+      "id": 1,
+      "color": "blue",
+      "start": {
+        "type": "terminal",
+        "component_id": 1,
+        "terminal": "single_hot"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 2,
+        "terminal": "1"
+      },
+      "nodes": []
+    },
+    {
+      "id": 2,
+      "color": "blue",
+      "start": {
+        "type": "terminal",
+        "component_id": 2,
+        "terminal": "2"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 4,
+        "terminal": "1"
+      },
+      "nodes": []
+    },
+    {
+      "id": 4,
+      "color": "blue",
+      "start": {
+        "type": "terminal",
+        "component_id": 2,
+        "terminal": "3"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 5,
+        "terminal": "gnd"
+      },
+      "nodes": []
+    },
+    {
+      "id": 5,
+      "color": "blue",
+      "start": {
+        "type": "terminal",
+        "component_id": 1,
+        "terminal": "single_gnd"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 5,
+        "terminal": "gnd"
+      },
+      "nodes": []
+    },
+    {
+      "id": 6,
+      "color": "blue",
+      "start": {
+        "type": "terminal",
+        "component_id": 4,
+        "terminal": "2"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 3,
+        "terminal": "3"
+      },
+      "nodes": []
+    },
+    {
+      "id": 7,
+      "color": "blue",
+      "start": {
+        "type": "terminal",
+        "component_id": 3,
+        "terminal": "2"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 5,
+        "terminal": "gnd"
+      },
+      "nodes": []
+    },
+    {
+      "id": 9,
+      "color": "blue",
+      "start": {
+        "type": "terminal",
+        "component_id": 6,
+        "terminal": "gnd"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 5,
+        "terminal": "gnd"
+      },
+      "nodes": []
+    },
+    {
+      "id": 10,
+      "color": "blue",
+      "start": {
+        "type": "terminal",
+        "component_id": 2,
+        "terminal": "2"
+      },
+      "end": {
+        "type": "terminal",
+        "component_id": 6,
+        "terminal": "hot"
+      },
+      "nodes": [
+        [
+          189,
+          397
+        ]
+      ]
+    }
+  ]
+}
