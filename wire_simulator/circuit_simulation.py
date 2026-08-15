@@ -212,7 +212,7 @@ class CircuitSimulator:
                             terminals[f"{coil}_hot"], terminals[f"{coil}_gnd"]
                         )
                         source_key = f"{component.component_id}:{coil[0].upper()}"
-                        pickups.append((source_key, first, second, source_voltage / 2,
+                        pickups.append((source_key, first, second, source_voltage,
                                         resistance / 2, inductance / 2))
                 else:
                     first, second = endpoints(terminals["hot"], terminals["gnd"])
@@ -408,7 +408,7 @@ class CircuitSimulator:
                     for coil in ("north", "south"):
                         stamp_norton(
                             terminals[f"{coil}_hot"], terminals[f"{coil}_gnd"],
-                            cmath.rect(source_voltage / 2, source_phase),
+                            cmath.rect(source_voltage, source_phase),
                             complex(coil_resistance, omega * coil_inductance),
                         )
                 else:
