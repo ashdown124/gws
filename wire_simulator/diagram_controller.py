@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
@@ -16,11 +17,11 @@ class DiagramControllerMixin:
             return
         source_components = [
             component for tag, component in self.components.items()
-            if tag in self.selected_tags and component.kind != "jack"
+            if tag in self.selected_component_tags and component.kind != "jack"
         ]
         if not source_components:
             return
-        history_before = self._diagram_data()
+        history_before = self._build_diagram_snapshot()
         copied_tags: list[str] = []
         offset = self.GRID_SIZE
         for source in source_components:
@@ -53,18 +54,15 @@ class DiagramControllerMixin:
 
         self._clear_component_selection()
         for tag in copied_tags:
-            self.selected_tags.add(tag)
+            self.selected_component_tags.add(tag)
             self.components[tag].set_selected(True)
-        self.selected_tag = copied_tags[-1]
-        self._refresh_element_list()
+        self.active_component_tag = copied_tags[-1]
+        self._refresh_component_wire_panel()
         self._render_property_editor()
         self._commit_history("component_copy", history_before)
 
     def _copy_shortcut(self, event: tk.Event) -> str | None:
-        focused = event.widget.focus_get() if event.widget is not None else None
-        if focused is not None and focused.winfo_class() in (
-            "Entry", "TEntry", "TCombobox",
-        ):
+        if self._shortcut_uses_text_editor(event):
             return None
         self._copy_selected_components()
         return "break"
@@ -72,48 +70,48 @@ class DiagramControllerMixin:
     def delete_selected(self) -> None:
         if self._delete_selected_wire_node():
             return
-        history_before = self._diagram_data()
+        history_before = self._build_diagram_snapshot()
         if self.selected_wire is not None:
             deleted_wire = self.selected_wire
             self._remove_wire_cascade(deleted_wire)
-            self._refresh_element_list()
+            self._refresh_component_wire_panel()
             self._render_property_editor()
             self._commit_history("wire_delete", history_before)
             return
         selected_components = [
-            tag for tag in self.selected_tags if tag in self.components
+            tag for tag in self.selected_component_tags if tag in self.components
         ]
         if selected_components:
             if (
-                self.wire_start_endpoint is not None
-                and self._terminal_component_tag(self.wire_start_endpoint)
+                self.draft_wire_start_canvas_id is not None
+                and self._terminal_component_tag(self.draft_wire_start_canvas_id)
                 in selected_components
             ):
                 self._cancel_wire()
             for deleted_tag in selected_components:
-                self._delete_connections_for_component(deleted_tag)
+                self._delete_wires_for_component(deleted_tag)
                 self.components.pop(deleted_tag).delete()
-            self.selected_tags.clear()
-            self.selected_tag = None
-            self._refresh_element_list()
+            self.selected_component_tags.clear()
+            self.active_component_tag = None
+            self._refresh_component_wire_panel()
             self._render_property_editor()
             self._commit_history("component_delete", history_before)
 
     def clear_canvas(self) -> None:
         self._cancel_wire()
         for wire in self.wires:
-            self._delete_wire(wire)
+            self._delete_wire_canvas_items(wire)
         self.wires.clear()
         self.selected_wire = None
-        self.selected_wire_node = None
+        self.selected_wire_node_ref = None
         for component in self.components.values():
             component.delete()
         self.components.clear()
-        self.selected_tags.clear()
-        self.selected_tag = None
+        self.selected_component_tags.clear()
+        self.active_component_tag = None
         self.next_component_id = 1
         self.next_wire_id = 1
-        self._refresh_element_list()
+        self._refresh_component_wire_panel()
         self._render_property_editor()
 
     def _component_position(self, component: CanvasComponent) -> tuple[float, float]:
@@ -135,12 +133,12 @@ class DiagramControllerMixin:
                         "terminal": terminal_name,
                     }
         for wire in self.wires:
-            for node_index, node_item in enumerate(wire.node_items):
-                if node_item == endpoint:
+            for node_index, node_canvas_id in enumerate(wire.node_canvas_ids):
+                if node_canvas_id == endpoint:
                     return {"type": "wire_node", "wire_id": wire.wire_id, "node": node_index}
         raise ValueError(f"Unknown wire endpoint: {endpoint}")
 
-    def _diagram_data(self) -> dict[str, object]:
+    def _build_diagram_snapshot(self) -> dict[str, object]:
         components = []
         for component in self.components.values():
             x, y = self._component_position(component)
@@ -158,27 +156,34 @@ class DiagramControllerMixin:
         wires = [{
             "id": wire.wire_id,
             "color": wire.color,
-            "start": self._endpoint_reference(wire.start_endpoint),
-            "end": self._endpoint_reference(wire.end_endpoint),
-            "nodes": [[x, y] for x, y in wire.nodes],
+            "start": self._endpoint_reference(wire.start_endpoint_canvas_id),
+            "end": self._endpoint_reference(wire.end_endpoint_canvas_id),
+            "nodes": [[x, y] for x, y in wire.node_positions],
         } for wire in self.wires]
         return build_diagram(components, wires)
 
     def _save_diagram(self) -> None:
-        path_value = filedialog.asksaveasfilename(
-            parent=self.root,
-            title=self.localization.text("save_diagram"),
-            initialfile="diagram.gws",
-            defaultextension=".gws",
-            filetypes=[
+        loaded_path = (
+            Path(self.current_diagram_path)
+            if self.current_diagram_path else None
+        )
+        dialog_options = {
+            "parent": self.root,
+            "title": self.localization.text("save_diagram"),
+            "initialfile": loaded_path.name if loaded_path else "diagram.gws",
+            "defaultextension": ".gws",
+            "filetypes": [
                 (self.localization.text("diagram_file_type"), "*.gws"),
                 (self.localization.text("all_files"), "*.*"),
             ],
-        )
+        }
+        if loaded_path is not None:
+            dialog_options["initialdir"] = str(loaded_path.parent)
+        path_value = filedialog.asksaveasfilename(**dialog_options)
         if not path_value:
             return
         try:
-            save_diagram(path_value, self._diagram_data())
+            save_diagram(path_value, self._build_diagram_snapshot())
         except (OSError, ValueError) as error:
             messagebox.showerror(
                 self.localization.text("save_error_title"),
@@ -204,29 +209,46 @@ class DiagramControllerMixin:
         if reference.get("type") == "wire_node":
             wire = wires_by_id.get(int(reference["wire_id"]))
             node_index = int(reference["node"])
-            if wire is not None and 0 <= node_index < len(wire.node_items):
-                return wire.node_items[node_index]
+            if wire is not None and 0 <= node_index < len(wire.node_canvas_ids):
+                return wire.node_canvas_ids[node_index]
         return None
 
     def _create_loaded_wire(
-        self, wire_id: int, start: int, end: int,
-        nodes: list[tuple[float, float]], color: str,
+        self,
+        wire_id: int,
+        start_endpoint_canvas_id: int,
+        end_endpoint_canvas_id: int,
+        node_positions: list[tuple[float, float]],
+        color: str,
     ) -> WireConnection:
-        points = self._wire_points(start, nodes, self._endpoint_center(end))
+        points = self._wire_points(
+            start_endpoint_canvas_id,
+            node_positions,
+            self._endpoint_center(end_endpoint_canvas_id),
+        )
         display_color = WIRE_COLORS.get(color, WIRE_COLORS["blue"])
-        highlight = self.canvas.create_line(
+        highlight_canvas_id = self.canvas.create_line(
             *points, fill="#f59e0b", width=9, joinstyle="round",
             state="hidden", tags=("wire", "wire_highlight"),
         )
-        line = self.canvas.create_line(
+        line_canvas_id = self.canvas.create_line(
             *points, fill=display_color, width=3, joinstyle="round", tags=("wire",),
         )
-        node_items = [self.canvas.create_oval(
+        node_canvas_ids = [self.canvas.create_oval(
             x - WIRE_NODE_RADIUS, y - WIRE_NODE_RADIUS,
             x + WIRE_NODE_RADIUS, y + WIRE_NODE_RADIUS,
             fill=display_color, outline="#ffffff", width=1, tags=("wire", "wire_node"),
-        ) for x, y in nodes]
-        return WireConnection(wire_id, highlight, line, start, end, nodes, node_items, color)
+        ) for x, y in node_positions]
+        return WireConnection(
+            wire_id=wire_id,
+            highlight_canvas_id=highlight_canvas_id,
+            line_canvas_id=line_canvas_id,
+            start_endpoint_canvas_id=start_endpoint_canvas_id,
+            end_endpoint_canvas_id=end_endpoint_canvas_id,
+            node_positions=node_positions,
+            node_canvas_ids=node_canvas_ids,
+            color=color,
+        )
 
     def _restore_diagram(self, data: dict[str, object]) -> set[str]:
         missing_custom_switches: set[str] = set()
@@ -278,12 +300,20 @@ class DiagramControllerMixin:
             for record in pending:
                 if not isinstance(record, dict):
                     raise ValueError(self.localization.text("invalid_diagram"))
-                start_ref, end_ref = record["start"], record["end"]
-                if not isinstance(start_ref, dict) or not isinstance(end_ref, dict):
+                start_endpoint_reference = record["start"]
+                end_endpoint_reference = record["end"]
+                if (
+                    not isinstance(start_endpoint_reference, dict)
+                    or not isinstance(end_endpoint_reference, dict)
+                ):
                     raise ValueError(self.localization.text("invalid_diagram"))
-                start = self._resolve_endpoint_reference(start_ref, components_by_id, wires_by_id)
-                end = self._resolve_endpoint_reference(end_ref, components_by_id, wires_by_id)
-                if start is None or end is None:
+                start_endpoint_canvas_id = self._resolve_endpoint_reference(
+                    start_endpoint_reference, components_by_id, wires_by_id
+                )
+                end_endpoint_canvas_id = self._resolve_endpoint_reference(
+                    end_endpoint_reference, components_by_id, wires_by_id
+                )
+                if start_endpoint_canvas_id is None or end_endpoint_canvas_id is None:
                     remaining.append(record)
                     continue
                 wire_id = int(record["id"])
@@ -292,9 +322,17 @@ class DiagramControllerMixin:
                 raw_nodes = record["nodes"]
                 if not isinstance(raw_nodes, list):
                     raise ValueError(self.localization.text("invalid_diagram"))
-                nodes = [(float(node[0]), float(node[1])) for node in raw_nodes]
+                node_positions = [
+                    (float(node[0]), float(node[1])) for node in raw_nodes
+                ]
                 color = str(record["color"])
-                wire = self._create_loaded_wire(wire_id, start, end, nodes, color)
+                wire = self._create_loaded_wire(
+                    wire_id,
+                    start_endpoint_canvas_id,
+                    end_endpoint_canvas_id,
+                    node_positions,
+                    color,
+                )
                 self.wires.append(wire)
                 wires_by_id[wire_id] = wire
                 progress = True
@@ -305,7 +343,7 @@ class DiagramControllerMixin:
         self.next_component_id = max(components_by_id, default=0) + 1
         self.next_wire_id = max(wires_by_id, default=0) + 1
         self._raise_wires_above_components()
-        self._refresh_element_list()
+        self._refresh_component_wire_panel()
         self._render_property_editor()
         return missing_custom_switches
 
@@ -349,18 +387,28 @@ class DiagramControllerMixin:
         self._load_diagram()
         return "break"
 
-    def _confirm_clear_canvas(self) -> None:
-        if not self.components and not self.wires:
+    def _confirm_new_diagram(self) -> None:
+        if (
+            not self.components
+            and not self.wires
+            and self.current_diagram_path is None
+            and not self._document_is_dirty()
+        ):
             return
-        if messagebox.askyesno(
-            self.localization.text("clear_confirm_title"),
-            self.localization.text("clear_confirm_message"),
+        if (self.components or self.wires) and not messagebox.askyesno(
+            self.localization.text("new_diagram_confirm_title"),
+            self.localization.text("new_diagram_confirm_message"),
             parent=self.root,
         ):
-            history_before = self._diagram_data()
-            self.clear_canvas()
-            self._commit_history("clear_all", history_before)
+            return
+        self.clear_canvas()
+        self._reset_history()
+        self.simulation.reset_results()
+        self.simulation.status_key = "simulation_inactive"
+        self.last_electrical_signature = None
+        self._mark_diagram_clean()
+        self._refresh_simulation_panel()
 
-    def _clear_shortcut(self, _event: tk.Event) -> str:
-        self._confirm_clear_canvas()
+    def _new_diagram_shortcut(self, _event: tk.Event) -> str:
+        self._confirm_new_diagram()
         return "break"

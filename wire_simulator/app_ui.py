@@ -13,6 +13,17 @@ class AppUIMixin:
                         font=("Malgun Gothic", 16, "bold"))
         style.configure("Hint.TLabel", background="#202936", foreground="#a9b4c3",
                         font=("Malgun Gothic", 9))
+        style.configure(
+            "SpectrumTitle.TLabel",
+            background="#202936",
+            foreground="#cbd5e1",
+            font=("Malgun Gothic", 10, "bold"),
+        )
+        style.configure(
+            "SpectrumControl.TButton",
+            font=("Malgun Gothic", 8),
+            padding=(4, 2),
+        )
         style.configure("Component.TButton", font=("Malgun Gothic", 10), padding=(10, 9))
         style.configure(
             "Sidebar.TCheckbutton", background="#202936", foreground="#e7edf5",
@@ -24,13 +35,17 @@ class AppUIMixin:
             foreground=[("disabled", "#64748b"), ("!disabled", "#e7edf5")],
         )
         style.configure(
-            "Danger.TButton", font=("Malgun Gothic", 10, "bold"), padding=(10, 9),
-            foreground="#ffffff", background="#dc2626", bordercolor="#b91c1c",
+            "NewDiagram.TButton",
+            font=("Malgun Gothic", 10, "bold"),
+            padding=(10, 9),
+            foreground="#0f172a",
+            background="#38bdf8",
+            bordercolor="#0284c7",
         )
         style.map(
-            "Danger.TButton",
-            background=[("active", "#ef4444"), ("pressed", "#b91c1c")],
-            foreground=[("disabled", "#fecaca"), ("!disabled", "#ffffff")],
+            "NewDiagram.TButton",
+            background=[("active", "#7dd3fc"), ("pressed", "#0ea5e9")],
+            foreground=[("disabled", "#64748b"), ("!disabled", "#0f172a")],
         )
 
     def _build_ui(self) -> None:
@@ -95,10 +110,12 @@ class AppUIMixin:
         self.redo_button.pack(side="left", fill="x", expand=True, padx=(3, 0))
         sidebar_footer = ttk.Frame(sidebar, style="Sidebar.TFrame")
         sidebar_footer.pack(side="bottom", fill="x")
-        self.clear_button = ttk.Button(
-            sidebar_footer, style="Danger.TButton", command=self._confirm_clear_canvas
+        self.new_diagram_button = ttk.Button(
+            sidebar_footer,
+            style="NewDiagram.TButton",
+            command=self._confirm_new_diagram,
         )
-        self.clear_button.pack(fill="x", padx=16, pady=(5, 0))
+        self.new_diagram_button.pack(fill="x", padx=16, pady=(5, 0))
         self.controls_help_button = ttk.Button(
             sidebar_footer, command=self._show_controls_help
         )
@@ -109,17 +126,66 @@ class AppUIMixin:
         self.simulation_panel.pack_propagate(False)
         self.simulation_title = ttk.Label(self.simulation_panel, style="Title.TLabel")
         self.simulation_title.pack(anchor="w", padx=16, pady=(22, 12))
+        self.cable_capacitance_label = ttk.Label(
+            self.simulation_panel, style="Hint.TLabel"
+        )
+        self.cable_capacitance_label.pack(anchor="w", padx=16, pady=(0, 4))
+        cable_capacitance_row = ttk.Frame(
+            self.simulation_panel, style="Sidebar.TFrame"
+        )
+        cable_capacitance_row.pack(fill="x", padx=16)
+        self.cable_capacitance_entry = ttk.Entry(
+            cable_capacitance_row,
+            width=10,
+            textvariable=self.cable_capacitance_var,
+        )
+        self.cable_capacitance_entry.pack(side="left")
+        self.cable_capacitance_entry.bind(
+            "<Return>", self._apply_cable_capacitance
+        )
+        ttk.Label(
+            cable_capacitance_row, text="pF", style="Hint.TLabel"
+        ).pack(side="left", padx=(6, 0))
         self.pickup_traces_title = ttk.Label(
             self.simulation_panel, style="Hint.TLabel"
         )
-        self.pickup_traces_title.pack(anchor="w", padx=16, pady=(0, 3))
+        self.pickup_traces_title.pack(anchor="w", padx=16, pady=(10, 3))
         self.pickup_traces_frame = ttk.Frame(
             self.simulation_panel, style="Sidebar.TFrame"
         )
         self.pickup_traces_frame.pack(fill="x", padx=16, pady=(0, 10))
         ttk.Separator(self.simulation_panel).pack(fill="x", padx=16, pady=(0, 14))
-        self.magnitude_spectrum_title = ttk.Label(self.simulation_panel, style="Hint.TLabel")
+        self.magnitude_spectrum_title = ttk.Label(
+            self.simulation_panel, style="SpectrumTitle.TLabel"
+        )
         self.magnitude_spectrum_title.pack(anchor="w", padx=16, pady=(0, 4))
+        spectrum_scale_row = ttk.Frame(
+            self.simulation_panel, style="Sidebar.TFrame"
+        )
+        spectrum_scale_row.pack(fill="x", padx=16, pady=(0, 4))
+        self.spectrum_scale_label = ttk.Label(
+            spectrum_scale_row, style="Hint.TLabel"
+        )
+        self.spectrum_scale_label.pack(side="left")
+        self.spectrum_scale_choice = ttk.Combobox(
+            spectrum_scale_row,
+            width=7,
+            state="readonly",
+            textvariable=self.spectrum_scale_var,
+            values=("Linear", "Log"),
+        )
+        self.spectrum_scale_choice.pack(side="right")
+        self.spectrum_scale_choice.bind(
+            "<<ComboboxSelected>>", self._change_spectrum_scale
+        )
+        self.reset_voltage_axis_button = ttk.Button(
+            self.simulation_panel,
+            style="SpectrumControl.TButton",
+            command=self._reset_voltage_axis_max,
+        )
+        self.reset_voltage_axis_button.pack(
+            anchor="w", padx=16, pady=(0, 6)
+        )
         self.magnitude_spectrum = tk.Canvas(
             self.simulation_panel,
             height=190,
@@ -128,7 +194,9 @@ class AppUIMixin:
             highlightbackground="#394657",
         )
         self.magnitude_spectrum.pack(fill="x", padx=16, pady=(0, 12))
-        self.phase_spectrum_title = ttk.Label(self.simulation_panel, style="Hint.TLabel")
+        self.phase_spectrum_title = ttk.Label(
+            self.simulation_panel, style="SpectrumTitle.TLabel"
+        )
         self.phase_spectrum_title.pack(anchor="w", padx=16, pady=(0, 4))
         self.phase_spectrum = tk.Canvas(
             self.simulation_panel,
@@ -145,30 +213,30 @@ class AppUIMixin:
         self.magnitude_spectrum.bind("<Configure>", self._redraw_signal_graphs)
         self.phase_spectrum.bind("<Configure>", self._redraw_signal_graphs)
 
-        element_panel = ttk.Frame(self.root, width=230, style="Sidebar.TFrame")
-        element_panel.pack(side="right", fill="y")
-        element_panel.pack_propagate(False)
-        self.elements_title = ttk.Label(element_panel, style="Title.TLabel")
-        self.elements_title.pack(anchor="w", padx=16, pady=(22, 8))
+        component_wire_panel = ttk.Frame(self.root, width=230, style="Sidebar.TFrame")
+        component_wire_panel.pack(side="right", fill="y")
+        component_wire_panel.pack_propagate(False)
+        self.components_title = ttk.Label(component_wire_panel, style="Title.TLabel")
+        self.components_title.pack(anchor="w", padx=16, pady=(22, 8))
         self.show_component_labels_check = ttk.Checkbutton(
-            element_panel,
+            component_wire_panel,
             style="Sidebar.TCheckbutton",
             variable=self.show_component_labels,
             command=self._toggle_component_labels,
         )
         self.show_component_labels_check.pack(anchor="w", padx=16, pady=(0, 8))
-        order_buttons = ttk.Frame(element_panel, style="Sidebar.TFrame")
+        order_buttons = ttk.Frame(component_wire_panel, style="Sidebar.TFrame")
         order_buttons.pack(fill="x", padx=14, pady=(0, 10))
         self.move_up_button = ttk.Button(
-            order_buttons, command=lambda: self._move_selected_element(-1)
+            order_buttons, command=lambda: self._move_selected_components(-1)
         )
         self.move_up_button.pack(side="left", fill="x", expand=True, padx=(0, 3))
         self.move_down_button = ttk.Button(
-            order_buttons, command=lambda: self._move_selected_element(1)
+            order_buttons, command=lambda: self._move_selected_components(1)
         )
         self.move_down_button.pack(side="left", fill="x", expand=True, padx=(3, 0))
-        self.element_list = tk.Listbox(
-            element_panel,
+        self.component_list = tk.Listbox(
+            component_wire_panel,
             selectmode=tk.EXTENDED,
             bg="#18202b",
             fg="#e7edf5",
@@ -179,13 +247,13 @@ class AppUIMixin:
             activestyle="none",
             font=("Malgun Gothic", 10),
         )
-        self.element_list.pack(fill="both", expand=True, padx=14, pady=(0, 18))
-        self.element_list.bind("<<ListboxSelect>>", self._select_from_element_list)
+        self.component_list.pack(fill="both", expand=True, padx=14, pady=(0, 18))
+        self.component_list.bind("<<ListboxSelect>>", self._select_from_component_list)
 
-        self.wires_title = ttk.Label(element_panel, style="Title.TLabel")
+        self.wires_title = ttk.Label(component_wire_panel, style="Title.TLabel")
         self.wires_title.pack(anchor="w", padx=16, pady=(0, 8))
         self.wire_list = tk.Listbox(
-            element_panel,
+            component_wire_panel,
             bg="#18202b",
             fg="#e7edf5",
             selectbackground="#d89720",
@@ -198,10 +266,10 @@ class AppUIMixin:
         self.wire_list.pack(fill="both", expand=True, padx=14, pady=(0, 18))
         self.wire_list.bind("<<ListboxSelect>>", self._select_from_wire_list)
 
-        ttk.Separator(element_panel).pack(fill="x", padx=14)
-        self.properties_title = ttk.Label(element_panel, style="Title.TLabel")
+        ttk.Separator(component_wire_panel).pack(fill="x", padx=14)
+        self.properties_title = ttk.Label(component_wire_panel, style="Title.TLabel")
         self.properties_title.pack(anchor="w", padx=16, pady=(12, 8))
-        properties_scroll_frame = ttk.Frame(element_panel, style="Sidebar.TFrame")
+        properties_scroll_frame = ttk.Frame(component_wire_panel, style="Sidebar.TFrame")
         properties_scroll_frame.pack(fill="x", padx=14, pady=(0, 18))
         self.properties_canvas = tk.Canvas(
             properties_scroll_frame,

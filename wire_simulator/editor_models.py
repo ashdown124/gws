@@ -18,12 +18,12 @@ WIRE_NODE_RADIUS = 9
 @dataclass
 class WireConnection:
     wire_id: int
-    highlight_id: int
-    line_id: int
-    start_endpoint: int
-    end_endpoint: int
-    nodes: list[tuple[float, float]] = field(default_factory=list)
-    node_items: list[int] = field(default_factory=list)
+    highlight_canvas_id: int
+    line_canvas_id: int
+    start_endpoint_canvas_id: int
+    end_endpoint_canvas_id: int
+    node_positions: list[tuple[float, float]] = field(default_factory=list)
+    node_canvas_ids: list[int] = field(default_factory=list)
     color: str = "blue"
 
 

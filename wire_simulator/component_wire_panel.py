@@ -9,17 +9,17 @@ from .editor_models import WireConnection
 PICKUP_TRACE_COLORS = ("#f97316", "#a855f7", "#eab308", "#ef4444", "#14b8a6")
 
 
-class ElementPanelMixin:
+class ComponentWirePanelMixin:
     """Component/wire lists, ordering controls, and pickup trace selectors."""
 
-    def _refresh_element_list(self) -> None:
-        self.element_list.delete(0, tk.END)
+    def _refresh_component_wire_panel(self) -> None:
+        self.component_list.delete(0, tk.END)
         self.wire_list.delete(0, tk.END)
-        self.element_list_tags = list(self.components)
+        self.component_list_tags = list(self.components)
         self.wire_list_references = [self._wire_reference(wire) for wire in self.wires]
-        if not self.element_list_tags:
-            self.element_list.insert(tk.END, self.localization.text("elements_empty"))
-            self.element_list.itemconfigure(0, foreground="#7f8b99")
+        if not self.component_list_tags:
+            self.component_list.insert(tk.END, self.localization.text("components_empty"))
+            self.component_list.itemconfigure(0, foreground="#7f8b99")
             self._update_order_button_states()
         else:
             for tag, component in self.components.items():
@@ -27,7 +27,7 @@ class ElementPanelMixin:
                     component.custom_name
                     or self.localization.text(f"component_{component.kind}")
                 )
-                self.element_list.insert(
+                self.component_list.insert(
                     tk.END,
                     f"#{component.component_id}  {label}  [{self._component_detail(component)}]",
                 )
@@ -37,12 +37,12 @@ class ElementPanelMixin:
         for wire in self.wires:
             color = self.localization.text(f"color_{wire.color}")
             detail = self.localization.text("wire_detail").format(
-                color=color, count=len(wire.nodes)
+                color=color, count=len(wire.node_positions)
             )
             self.wire_list.insert(
                 tk.END, f"W#{wire.wire_id}  {self.localization.text('wire_label')}  [{detail}]"
             )
-        self._sync_element_list_selection()
+        self._sync_component_wire_list_selection()
         self._refresh_pickup_trace_controls()
         self._update_add_component_button_state()
         self._raise_wires_above_components()
@@ -109,70 +109,72 @@ class ElementPanelMixin:
 
     def _update_order_button_states(self) -> None:
         ordered_tags = list(self.components)
-        selected_tags = self.selected_tags & set(ordered_tags)
-        if not selected_tags:
+        selected_component_tags = self.selected_component_tags & set(ordered_tags)
+        if not selected_component_tags:
             self.move_up_button.configure(state="disabled")
             self.move_down_button.configure(state="disabled")
             return
         can_move_up = any(
-            index > 0 and ordered_tags[index - 1] not in selected_tags
-            for index, tag in enumerate(ordered_tags) if tag in selected_tags
+            index > 0 and ordered_tags[index - 1] not in selected_component_tags
+            for index, tag in enumerate(ordered_tags) if tag in selected_component_tags
         )
         can_move_down = any(
             index < len(ordered_tags) - 1
-            and ordered_tags[index + 1] not in selected_tags
-            for index, tag in enumerate(ordered_tags) if tag in selected_tags
+            and ordered_tags[index + 1] not in selected_component_tags
+            for index, tag in enumerate(ordered_tags) if tag in selected_component_tags
         )
         self.move_up_button.configure(state="normal" if can_move_up else "disabled")
         self.move_down_button.configure(state="normal" if can_move_down else "disabled")
 
-    def _move_selected_element(self, direction: int) -> None:
-        selected_tags = self.selected_tags & set(self.components)
-        if not selected_tags:
+    def _move_selected_components(self, direction: int) -> None:
+        selected_component_tags = self.selected_component_tags & set(self.components)
+        if not selected_component_tags:
             return
         ordered_tags = list(self.components)
-        selected_in_order = [tag for tag in ordered_tags if tag in selected_tags]
+        selected_components_in_order = [
+            tag for tag in ordered_tags if tag in selected_component_tags
+        ]
         if direction < 0:
-            for tag in selected_in_order:
+            for tag in selected_components_in_order:
                 index = ordered_tags.index(tag)
-                if index > 0 and ordered_tags[index - 1] not in selected_tags:
+                if index > 0 and ordered_tags[index - 1] not in selected_component_tags:
                     ordered_tags[index - 1], ordered_tags[index] = (
                         ordered_tags[index], ordered_tags[index - 1]
                     )
         else:
-            for tag in reversed(selected_in_order):
+            for tag in reversed(selected_components_in_order):
                 index = ordered_tags.index(tag)
                 if (
                     index < len(ordered_tags) - 1
-                    and ordered_tags[index + 1] not in selected_tags
+                    and ordered_tags[index + 1] not in selected_component_tags
                 ):
                     ordered_tags[index], ordered_tags[index + 1] = (
                         ordered_tags[index + 1], ordered_tags[index]
                     )
         self.components = {tag: self.components[tag] for tag in ordered_tags}
         self._apply_canvas_stack_order()
-        self._refresh_element_list()
+        self._refresh_component_wire_panel()
 
     def _apply_canvas_stack_order(self) -> None:
         for tag in reversed(self.components):
             self.canvas.tag_raise(tag)
         self._raise_wires_above_components()
 
-    def _select_from_element_list(self, _event: tk.Event) -> None:
+    def _select_from_component_list(self, _event: tk.Event) -> None:
         selection = [
-            index for index in self.element_list.curselection()
-            if index < len(self.element_list_tags)
+            index for index in self.component_list.curselection()
+            if index < len(self.component_list_tags)
         ]
-        if not selection or not self.element_list_tags:
+        if not selection or not self.component_list_tags:
             return
         self._clear_wire_selection()
         self._clear_component_selection()
         for index in selection:
-            tag = self.element_list_tags[index]
-            self.selected_tags.add(tag)
+            tag = self.component_list_tags[index]
+            self.selected_component_tags.add(tag)
             self.components[tag].set_selected(True)
-        self.selected_tag = self.element_list_tags[selection[-1]]
-        self._sync_element_list_selection()
+        self.active_component_tag = self.component_list_tags[selection[-1]]
+        self._sync_component_wire_list_selection()
         self._render_property_editor()
         self._update_status_bar()
 
@@ -190,8 +192,8 @@ class ElementPanelMixin:
     def _wire_from_reference(self, reference: str) -> WireConnection | None:
         return next((wire for wire in self.wires if self._wire_reference(wire) == reference), None)
 
-    def _sync_element_list_selection(self) -> None:
-        self.element_list.selection_clear(0, tk.END)
+    def _sync_component_wire_list_selection(self) -> None:
+        self.component_list.selection_clear(0, tk.END)
         self.wire_list.selection_clear(0, tk.END)
         if self.selected_wire is not None:
             reference = self._wire_reference(self.selected_wire)
@@ -202,14 +204,14 @@ class ElementPanelMixin:
                 self.wire_list.see(index)
         else:
             selected_indices = [
-                self.element_list_tags.index(tag)
-                for tag in self.selected_tags
-                if tag in self.element_list_tags
+                self.component_list_tags.index(tag)
+                for tag in self.selected_component_tags
+                if tag in self.component_list_tags
             ]
             for index in selected_indices:
-                self.element_list.selection_set(index)
-            if self.selected_tag in self.element_list_tags:
-                index = self.element_list_tags.index(self.selected_tag)
-                self.element_list.activate(index)
-                self.element_list.see(index)
+                self.component_list.selection_set(index)
+            if self.active_component_tag in self.component_list_tags:
+                index = self.component_list_tags.index(self.active_component_tag)
+                self.component_list.activate(index)
+                self.component_list.see(index)
         self._update_order_button_states()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import tkinter as tk
 from tkinter import ttk
 
@@ -83,10 +84,10 @@ class PropertiesPanelMixin:
             editor.pack(fill="x")
             self.property_widgets["wire_color"] = (tk.StringVar(value=self.selected_wire.color), editor)
             editor.bind("<<ComboboxSelected>>",
-                        lambda _event: self.root.after_idle(self._apply_component_properties))
+                        lambda _event: self.root.after_idle(self._apply_selected_properties))
             self._finish_property_editor_render()
             return
-        if len(self.selected_tags) > 1:
+        if len(self.selected_component_tags) > 1:
             ttk.Label(
                 self.properties_frame,
                 text=self.localization.text("multiple_selection"),
@@ -94,12 +95,12 @@ class PropertiesPanelMixin:
             ).pack(anchor="w", pady=6)
             self._finish_property_editor_render()
             return
-        if self.selected_tag not in self.components:
+        if self.active_component_tag not in self.components:
             ttk.Label(self.properties_frame, text=self.localization.text("no_selection"),
                       style="Hint.TLabel").pack(anchor="w", pady=6)
             self._finish_property_editor_render()
             return
-        component = self.components[self.selected_tag]
+        component = self.components[self.active_component_tag]
         schema = self._visible_component_schema(component)
         if not schema:
             ttk.Label(self.properties_frame, text=self.localization.text("no_properties"),
@@ -120,11 +121,11 @@ class PropertiesPanelMixin:
                 editor.current(field["choices"].index(value_var.get()))
                 editor.pack(fill="x", expand=True)
                 editor.bind("<<ComboboxSelected>>",
-                            lambda _event: self.root.after_idle(self._apply_component_properties))
+                            lambda _event: self.root.after_idle(self._apply_selected_properties))
             else:
                 editor = ttk.Entry(row, textvariable=value_var, width=12)
                 editor.pack(side="left", fill="x", expand=True)
-                editor.bind("<Return>", lambda _event: self._apply_component_properties())
+                editor.bind("<Return>", lambda _event: self._apply_selected_properties())
             self.property_widgets[field["key"]] = (value_var, editor)
             if "units" in field:
                 unit_key = f"{field['key']}_unit"
@@ -135,26 +136,28 @@ class PropertiesPanelMixin:
                 unit_editor.pack(side="left", padx=(5, 0))
                 self.property_widgets[unit_key] = (unit_var, unit_editor)
                 unit_editor.bind("<<ComboboxSelected>>",
-                                 lambda _event: self.root.after_idle(self._apply_component_properties))
+                                 lambda _event: self.root.after_idle(self._apply_selected_properties))
         self._finish_property_editor_render()
 
-    def _apply_component_properties(self) -> None:
-        history_before = self._diagram_data()
+    def _apply_selected_properties(self) -> None:
+        history_before = self._build_diagram_snapshot()
         if self.selected_wire is not None:
             selected_index = self.property_widgets["wire_color"][1].current()
             if selected_index >= 0:
                 self.selected_wire.color = list(WIRE_COLORS)[selected_index]
                 color = WIRE_COLORS[self.selected_wire.color]
-                self.canvas.itemconfigure(self.selected_wire.line_id, fill=color)
-                for node in self.selected_wire.node_items:
+                self.canvas.itemconfigure(
+                    self.selected_wire.line_canvas_id, fill=color
+                )
+                for node in self.selected_wire.node_canvas_ids:
                     self.canvas.itemconfigure(node, fill=color)
-                self._refresh_element_list()
+                self._refresh_component_wire_panel()
                 self._render_property_editor()
                 self._commit_history("option_change", history_before)
             return
-        if self.selected_tag not in self.components:
+        if self.active_component_tag not in self.components:
             return
-        component = self.components[self.selected_tag]
+        component = self.components[self.active_component_tag]
         previous_pickup_type = component.properties.get("pickup_type")
         previous_switch_type = component.properties.get("switch_type")
         for field in self._visible_component_schema(component):
@@ -165,8 +168,10 @@ class PropertiesPanelMixin:
             else:
                 value = value_var.get().strip()
                 try:
-                    if field["type"] == "number" and float(value) <= 0:
-                        continue
+                    if field["type"] == "number":
+                        numeric_value = float(value)
+                        if not math.isfinite(numeric_value) or numeric_value <= 0:
+                            continue
                 except ValueError:
                     continue
                 component.properties[field["key"]] = value
@@ -174,12 +179,12 @@ class PropertiesPanelMixin:
                 unit_key = f"{field['key']}_unit"
                 component.properties[unit_key] = self.property_widgets[unit_key][0].get()
         if component.kind == "pickup" and previous_pickup_type != component.properties.get("pickup_type"):
-            self._delete_connections_for_component(component.tag)
+            self._delete_wires_for_component(component.tag)
         if component.kind == "switch" and previous_switch_type != component.properties.get("switch_type"):
-            self._delete_connections_for_component(component.tag)
+            self._delete_wires_for_component(component.tag)
         component.update_visual()
         component.set_detail(self._component_detail(component))
-        self._refresh_element_list()
+        self._refresh_component_wire_panel()
         self._render_property_editor()
         self._commit_history("option_change", history_before)
 

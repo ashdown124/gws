@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+tests/
 .venv/
 venv/
 .build_tools/
@@ -17,3 +18,24 @@ save/
 !diagrams/*.gws
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Local settings and secrets
+.env
+.env.*
+!.env.example
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Temporary files
+*.log
+*.tmp
+*.bak
+
+# Coverage
+.coverage
+htmlcov/

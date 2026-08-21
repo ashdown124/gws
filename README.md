@@ -2,6 +2,8 @@
 
 Guitar Wiring Simulator (GWS) is a Python/Tkinter application for designing and analyzing passive electric-guitar wiring. English and Korean interfaces are included.
 
+Current release: **1.0.0**
+
 ## Installation and running
 
 Python 3.10 or later, Git, and Tkinter are required. No third-party Python packages are needed.
@@ -14,12 +16,17 @@ python main.py
 
 On Windows, the application can also be started with `app.bat`.
 
-## Features
+## Basic usage
 
-- Arrange pickups, potentiometers, resistors, capacitors, switches, a jack, and ground on a canvas.
-- Connect terminals with editable wires and junctions.
-- Save component options, positions, and wiring as a diagram.
-- Automatically analyze output magnitude and phase across 50-5000 Hz.
+- Select a component from the palette, add it to the canvas, and drag it into place.
+- Click a terminal to begin wiring, add nodes on the canvas, and click another terminal to complete the connection.
+- Select components or wires to edit their options. Potentiometers and switches can be adjusted with the mouse wheel.
+
+The application includes an in-app controls guide for selection, wiring, and keyboard shortcuts.
+
+## Signal simulation
+
+Signal analysis runs automatically when pickups are connected to the output jack. The output voltage and phase spectra are displayed across 0-7000 Hz.
 
 ## Saving and loading diagrams
 

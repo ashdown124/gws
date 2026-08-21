@@ -1,0 +1,7 @@
+[Name]
+SPDT
+[Grid]
+1 3
+[Position]
+"P1" (0,1);
+"P2" (1,2);

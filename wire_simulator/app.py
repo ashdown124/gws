@@ -4,6 +4,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox
 
+from . import __version__
 from .components import (
     COMPONENT_STYLES,
     CanvasComponent,
@@ -16,7 +17,7 @@ from .custom_switches import (
     load_custom_switches,
 )
 from .diagram_controller import DiagramControllerMixin
-from .element_panel import ElementPanelMixin
+from .component_wire_panel import ComponentWirePanelMixin
 from .history_controller import HistoryControllerMixin
 from .canvas_interaction import CanvasInteractionMixin
 from .localization import Localization
@@ -30,7 +31,7 @@ from .wiring_controller import WiringControllerMixin
 
 class WireSimulatorApp(
     AppUIMixin, CanvasInteractionMixin, DiagramControllerMixin,
-    CanvasSceneMixin, WiringControllerMixin, ElementPanelMixin,
+    CanvasSceneMixin, WiringControllerMixin, ComponentWirePanelMixin,
     PropertiesPanelMixin, SimulationPanelMixin, HistoryControllerMixin,
 ):
     GRID_SIZE = 24
@@ -75,21 +76,21 @@ class WireSimulatorApp(
         self.components: dict[str, CanvasComponent] = {}
         self.next_component_id = 1
         self.next_wire_id = 1
-        self.selected_tag: str | None = None
-        self.selected_tags: set[str] = set()
+        self.active_component_tag: str | None = None
+        self.selected_component_tags: set[str] = set()
         self.drag_origin: tuple[float, float] | None = None
         self.selected_component_kind = next(iter(COMPONENT_STYLES))
-        self.element_list_tags: list[str] = []
+        self.component_list_tags: list[str] = []
         self.wire_list_references: list[str] = []
         self.wires: list[WireConnection] = []
-        self.wire_start_endpoint: int | None = None
-        self.wire_nodes: list[tuple[float, float]] = []
-        self.wire_cursor: tuple[float, float] | None = None
-        self.wire_preview_items: list[int] = []
+        self.draft_wire_start_canvas_id: int | None = None
+        self.draft_wire_node_positions: list[tuple[float, float]] = []
+        self.draft_wire_cursor_position: tuple[float, float] | None = None
+        self.wire_preview_canvas_ids: list[int] = []
         self.selected_wire: WireConnection | None = None
-        self.selected_wire_node: tuple[WireConnection, int] | None = None
-        self.dragged_wire_node: tuple[WireConnection, int] | None = None
-        self.pending_wire_node_item: int | None = None
+        self.selected_wire_node_ref: tuple[WireConnection, int] | None = None
+        self.dragged_wire_node_ref: tuple[WireConnection, int] | None = None
+        self.pending_wire_start_node_canvas_id: int | None = None
         self.node_drag_started = False
         self.drag_history_before: dict[str, object] | None = None
         self.undo_history: list[HistoryEntry] = []
@@ -98,8 +99,11 @@ class WireSimulatorApp(
         self.simulation = SignalSimulationState()
         self.circuit_simulator = CircuitSimulator()
         self.simulation_job: str | None = None
-        self.simulation_signature: tuple[object, ...] | None = None
+        self.last_electrical_signature: tuple[object, ...] | None = None
         self.pickup_trace_vars: dict[str, tk.BooleanVar] = {}
+        self.cable_capacitance_var = tk.StringVar(value="300")
+        self.cable_capacitance_pf = 300.0
+        self.spectrum_scale_var = tk.StringVar(value="Linear")
         self.show_component_labels = tk.BooleanVar(value=True)
         self.current_diagram_path: str | None = None
         self.saved_diagram_snapshot: dict[str, object] | None = None
@@ -125,9 +129,9 @@ class WireSimulatorApp(
         self.undo_button.configure(text=text("undo"))
         self.redo_button.configure(text=text("redo"))
         self.history_title.configure(text=text("history_title"))
-        self.clear_button.configure(text=text("clear_all"))
+        self.new_diagram_button.configure(text=text("new_diagram"))
         self.controls_help_button.configure(text=text("controls_help_button"))
-        self.elements_title.configure(text=text("components_title"))
+        self.components_title.configure(text=text("components_title"))
         self.show_component_labels_check.configure(text=text("show_component_labels"))
         self.wires_title.configure(text=text("wires_title"))
         self.move_up_button.configure(text=text("move_up"))
@@ -135,8 +139,15 @@ class WireSimulatorApp(
         self.properties_title.configure(text=text("properties_title"))
         self.canvas.itemconfigure(self.wire_mode_indicator, text=text("wire_mode"))
         self.simulation_title.configure(text=text("simulation_title"))
+        self.cable_capacitance_label.configure(
+            text=text("cable_capacitance_label")
+        )
+        self.spectrum_scale_label.configure(text=text("spectrum_scale_label"))
         self.pickup_traces_title.configure(text=text("pickup_traces_title"))
-        self.magnitude_spectrum_title.configure(text=text("magnitude_spectrum_title"))
+        self._update_spectrum_scale_title()
+        self.reset_voltage_axis_button.configure(
+            text=text("reset_voltage_axis")
+        )
         self.phase_spectrum_title.configure(text=text("phase_spectrum_title"))
         self.simulation_note.configure(text=text("simulation_note"))
         self._refresh_simulation_panel()
@@ -149,20 +160,20 @@ class WireSimulatorApp(
                 component.custom_name, text(f"component_{component.kind}")
             )
             component.set_detail(self._component_detail(component))
-        self._refresh_element_list()
+        self._refresh_component_wire_panel()
         self._render_property_editor()
         self._update_history_button_states()
         self._update_status_bar()
 
     def _mark_diagram_clean(self, path: str | None = None) -> None:
         self.current_diagram_path = path
-        self.saved_diagram_snapshot = self._diagram_data()
+        self.saved_diagram_snapshot = self._build_diagram_snapshot()
         self._refresh_document_state()
 
     def _document_is_dirty(self) -> bool:
         return (
             self.saved_diagram_snapshot is not None
-            and self._diagram_data() != self.saved_diagram_snapshot
+            and self._build_diagram_snapshot() != self.saved_diagram_snapshot
         )
 
     def _refresh_document_state(self) -> None:
@@ -172,12 +183,15 @@ class WireSimulatorApp(
         self._update_status_bar()
 
     def _refresh_window_title(self) -> None:
-        application_title = self.localization.text("window_title")
+        application_title = f"{self.localization.text('window_title')} {__version__}"
         if self.saved_diagram_snapshot is not None and self._document_is_dirty():
             application_title = f"{application_title} *"
-        title = application_title
-        if self.current_diagram_path:
-            title = f"{Path(self.current_diagram_path).name} - {application_title}"
+        document_title = (
+            Path(self.current_diagram_path).name
+            if self.current_diagram_path
+            else self.localization.text("status_untitled")
+        )
+        title = f"{document_title} - {application_title}"
         self.root.title(title)
 
     def _update_status_bar(self) -> None:
@@ -189,16 +203,16 @@ class WireSimulatorApp(
             if self.current_diagram_path else text("status_untitled"),
             text("status_modified") if self._document_is_dirty() else text("status_saved"),
         ]
-        if self.wire_start_endpoint is not None:
+        if self.draft_wire_start_canvas_id is not None:
             sections.append(text("status_wiring"))
         elif self.selected_wire is not None:
             sections.append(text("status_selected_wire").format(id=self.selected_wire.wire_id))
-        elif len(self.selected_tags) > 1:
+        elif len(self.selected_component_tags) > 1:
             sections.append(text("status_selected_multiple").format(
-                count=len(self.selected_tags)
+                count=len(self.selected_component_tags)
             ))
-        elif self.selected_tag in self.components:
-            component = self.components[self.selected_tag]
+        elif self.active_component_tag in self.components:
+            component = self.components[self.active_component_tag]
             sections.append(text("status_selected_component").format(
                 name=component.custom_name or text(f"component_{component.kind}"),
                 id=component.component_id,

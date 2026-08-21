@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
-from typing import Any
+import tempfile
 
 
 DIAGRAM_FORMAT = "guitar-wiring-simulator"
@@ -28,11 +29,28 @@ def has_supported_envelope(data: dict[str, object]) -> bool:
 def save_diagram(path_value: str, data: dict[str, object]) -> None:
     path = Path(path_value).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as diagram_file:
-        json.dump(data, diagram_file, ensure_ascii=False, indent=2)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as diagram_file:
+            temporary_path = Path(diagram_file.name)
+            json.dump(data, diagram_file, ensure_ascii=False, indent=2)
+            diagram_file.flush()
+            os.fsync(diagram_file.fileno())
+        os.replace(temporary_path, path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
-def load_diagram(path_value: str) -> dict[str, Any]:
+def load_diagram(path_value: str) -> dict[str, object]:
     with Path(path_value).open("r", encoding="utf-8") as diagram_file:
         data = json.load(diagram_file)
     if not isinstance(data, dict):

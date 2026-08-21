@@ -12,7 +12,7 @@ class HistoryControllerMixin:
     def _commit_history(self, action: str, before: dict[str, object]) -> None:
         if self.history_restoring:
             return
-        after = self._diagram_data()
+        after = self._build_diagram_snapshot()
         if before == after:
             return
         self.undo_history.append(HistoryEntry(action, copy.deepcopy(before), after))
@@ -123,7 +123,7 @@ class HistoryControllerMixin:
         self.history_restoring = True
         try:
             self._restore_diagram(restored)
-            self.simulation_signature = None
+            self.last_electrical_signature = None
         finally:
             self.history_restoring = False
 
