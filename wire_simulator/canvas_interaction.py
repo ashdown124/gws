@@ -3,10 +3,26 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import simpledialog
 
-from .editor_models import WIRE_COLORS, WIRE_NODE_RADIUS
+from .editor_models import WIRE_COLORS
 
 
 class CanvasInteractionMixin:
+    def _on_canvas_pan_start(self, event: tk.Event) -> str:
+        self.canvas.scan_mark(event.x, event.y)
+        self.canvas.configure(cursor="fleur")
+        return "break"
+
+    def _on_canvas_pan_drag(self, event: tk.Event) -> str:
+        self.canvas.scan_dragto(event.x, event.y, gain=1)
+        self._draw_grid()
+        return "break"
+
+    def _on_canvas_pan_end(self, _event: tk.Event) -> str:
+        self.canvas.configure(
+            cursor="crosshair" if self.draft_wire_start_canvas_id is not None else "arrow"
+        )
+        return "break"
+
     def _rename_component(self, component_tag: str) -> None:
         component = self.components.get(component_tag)
         if component is None:
@@ -44,6 +60,7 @@ class CanvasInteractionMixin:
         return self._rotate_selection_shortcut(event, -1)
 
     def _on_mouse_down(self, event: tk.Event) -> None:
+        self._use_canvas_event_coordinates(event)
         # Return keyboard shortcuts to the editor after a palette or property
         # widget had focus. An empty-canvas click will also clear selection
         # through the normal hit-test path below.
@@ -128,6 +145,7 @@ class CanvasInteractionMixin:
         self.canvas.configure(cursor="fleur" if tag else "arrow")
 
     def _on_double_click(self, event: tk.Event) -> str:
+        self._use_canvas_event_coordinates(event)
         if self.draft_wire_start_canvas_id is not None or self._wire_node_at(event.x, event.y) is not None:
             return "break"
         wire_item = self._wire_item_at(event.x, event.y)
@@ -156,10 +174,11 @@ class CanvasInteractionMixin:
         history_before = self._build_diagram_snapshot()
         _distance, index, x, y = best_segment
         color = WIRE_COLORS.get(wire.color, WIRE_COLORS["blue"])
+        node_radius = self._wire_node_display_radius()
         node_canvas_id = self.canvas.create_oval(
-            x - WIRE_NODE_RADIUS, y - WIRE_NODE_RADIUS,
-            x + WIRE_NODE_RADIUS, y + WIRE_NODE_RADIUS,
-            fill=color, outline="#ffffff", width=1,
+            x - node_radius, y - node_radius,
+            x + node_radius, y + node_radius,
+            fill=color, outline="#ffffff", width=self._scaled_canvas_size(1),
             tags=("wire", "wire_node"),
         )
         wire.node_positions.insert(index, (x, y))
@@ -172,6 +191,7 @@ class CanvasInteractionMixin:
         return "break"
 
     def _on_mouse_drag(self, event: tk.Event) -> None:
+        self._use_canvas_event_coordinates(event)
         if self.draft_wire_start_canvas_id is not None:
             return
         if self.dragged_wire_node_ref is not None:
@@ -186,10 +206,11 @@ class CanvasInteractionMixin:
                 self.canvas.configure(cursor="fleur")
             wire.node_positions[node_index] = (event.x, event.y)
             node_canvas_id = wire.node_canvas_ids[node_index]
+            node_radius = self._wire_node_display_radius()
             self.canvas.coords(
                 node_canvas_id,
-                event.x - WIRE_NODE_RADIUS, event.y - WIRE_NODE_RADIUS,
-                event.x + WIRE_NODE_RADIUS, event.y + WIRE_NODE_RADIUS,
+                event.x - node_radius, event.y - node_radius,
+                event.x + node_radius, event.y + node_radius,
             )
             self._update_all_wire_geometry()
             self.drag_origin = (event.x, event.y)
@@ -226,6 +247,15 @@ class CanvasInteractionMixin:
             self._commit_history(history_action, history_before)
 
     def _on_mouse_wheel(self, event: tk.Event) -> str | None:
+        if event.state & 0x0004:
+            pivot_x = self.canvas.canvasx(event.x)
+            pivot_y = self.canvas.canvasy(event.y)
+            direction = 1 if event.delta > 0 else -1
+            self._set_canvas_zoom(
+                self.canvas_zoom + direction * self.CANVAS_ZOOM_STEP,
+                pivot_x, pivot_y,
+            )
+            return "break"
         if self.active_component_tag not in self.components:
             return None
         component = self.components[self.active_component_tag]
@@ -233,6 +263,16 @@ class CanvasInteractionMixin:
             return None
         direction = 1 if event.delta > 0 else -1
         self._adjust_selected_control(direction)
+        return "break"
+
+    def _on_linux_mouse_wheel(self, event: tk.Event, direction: int) -> str:
+        if event.state & 0x0004:
+            self._set_canvas_zoom(
+                self.canvas_zoom + direction * self.CANVAS_ZOOM_STEP,
+                self.canvas.canvasx(event.x), self.canvas.canvasy(event.y),
+            )
+        else:
+            self._adjust_selected_control(direction)
         return "break"
 
     def _adjust_selected_control(self, direction: int) -> None:
@@ -255,12 +295,14 @@ class CanvasInteractionMixin:
             self._refresh_document_state()
 
     def _on_mouse_motion(self, event: tk.Event) -> None:
+        self._use_canvas_event_coordinates(event)
         if self.draft_wire_start_canvas_id is None:
             return
         self.draft_wire_cursor_position = (event.x, event.y)
         self._redraw_wire_preview()
 
     def _on_right_click(self, event: tk.Event) -> None:
+        self._use_canvas_event_coordinates(event)
         if self.draft_wire_start_canvas_id is None:
             return
         if self.draft_wire_node_positions:

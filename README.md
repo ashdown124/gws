@@ -2,7 +2,7 @@
 
 Guitar Wiring Simulator (GWS) is a Python/Tkinter application for designing and analyzing passive electric-guitar wiring. English and Korean interfaces are included.
 
-Current release: **1.0.0**
+Current release: **1.1.0**
 
 ## Installation and running
 

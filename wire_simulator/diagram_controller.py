@@ -8,7 +8,7 @@ from tkinter import filedialog, messagebox
 from .components import COMPONENT_STYLES, CanvasComponent
 from .diagram_io import build_diagram, load_diagram, save_diagram
 from .diagram_validation import DiagramValidationError, validate_diagram
-from .editor_models import WIRE_COLORS, WIRE_NODE_RADIUS, WireConnection
+from .editor_models import WIRE_COLORS, WireConnection
 
 
 class DiagramControllerMixin:
@@ -43,6 +43,10 @@ class DiagramControllerMixin:
             component.set_gauge_value(source.gauge_value)
             component.set_switch_position(source.switch_position)
             component.rotate(source.rotation // 90)
+            component.scale_for_view(
+                self.canvas_zoom, source_x + offset, source_y + offset,
+                self.canvas_zoom,
+            )
             desired_x, desired_y = source_x + offset, source_y + offset
             actual_x, actual_y = self._component_position(component)
             component.move(desired_x - actual_x, desired_y - actual_y)
@@ -142,6 +146,8 @@ class DiagramControllerMixin:
         components = []
         for component in self.components.values():
             x, y = self._component_position(component)
+            x, y = self._canvas_to_diagram_point(x, y)
+            x, y = round(x, 6), round(y, 6)
             components.append({
                 "id": component.component_id,
                 "kind": component.kind,
@@ -158,7 +164,10 @@ class DiagramControllerMixin:
             "color": wire.color,
             "start": self._endpoint_reference(wire.start_endpoint_canvas_id),
             "end": self._endpoint_reference(wire.end_endpoint_canvas_id),
-            "nodes": [[x, y] for x, y in wire.node_positions],
+            "nodes": [
+                [round(value, 6) for value in self._canvas_to_diagram_point(x, y)]
+                for x, y in wire.node_positions
+            ],
         } for wire in self.wires]
         return build_diagram(components, wires)
 
@@ -228,16 +237,20 @@ class DiagramControllerMixin:
         )
         display_color = WIRE_COLORS.get(color, WIRE_COLORS["blue"])
         highlight_canvas_id = self.canvas.create_line(
-            *points, fill="#f59e0b", width=9, joinstyle="round",
+            *points, fill="#f59e0b", width=self._scaled_canvas_size(9),
+            joinstyle="round",
             state="hidden", tags=("wire", "wire_highlight"),
         )
         line_canvas_id = self.canvas.create_line(
-            *points, fill=display_color, width=3, joinstyle="round", tags=("wire",),
+            *points, fill=display_color, width=self._scaled_canvas_size(3),
+            joinstyle="round", tags=("wire",),
         )
+        node_radius = self._wire_node_display_radius()
         node_canvas_ids = [self.canvas.create_oval(
-            x - WIRE_NODE_RADIUS, y - WIRE_NODE_RADIUS,
-            x + WIRE_NODE_RADIUS, y + WIRE_NODE_RADIUS,
-            fill=display_color, outline="#ffffff", width=1, tags=("wire", "wire_node"),
+            x - node_radius, y - node_radius,
+            x + node_radius, y + node_radius,
+            fill=display_color, outline="#ffffff",
+            width=self._scaled_canvas_size(1), tags=("wire", "wire_node"),
         ) for x, y in node_positions]
         return WireConnection(
             wire_id=wire_id,
@@ -250,11 +263,17 @@ class DiagramControllerMixin:
             color=color,
         )
 
-    def _restore_diagram(self, data: dict[str, object]) -> set[str]:
+    def _restore_diagram(
+        self, data: dict[str, object],
+    ) -> tuple[set[str], set[str], set[int], set[str]]:
         missing_custom_switches: set[str] = set()
+        unsupported_components: set[str] = set()
+        unrestorable_wires: set[int] = set()
+        defaulted_options: set[str] = set()
         try:
             component_records, wire_records = validate_diagram(
-                data, self.custom_switches, missing_custom_switches
+                data, self.custom_switches, missing_custom_switches,
+                unsupported_components, unrestorable_wires, defaulted_options,
             )
         except DiagramValidationError as error:
             raise ValueError(self.localization.text(error.message_key)) from error
@@ -268,10 +287,13 @@ class DiagramControllerMixin:
             kind = str(record["kind"])
             if kind not in COMPONENT_STYLES or component_id in components_by_id:
                 raise ValueError(self.localization.text("invalid_diagram"))
+            component_x, component_y = self._diagram_to_canvas_point(
+                float(record["x"]), float(record["y"])
+            )
             component = CanvasComponent(
                 self.canvas, component_id, kind,
                 self.localization.text(f"component_{kind}"),
-                float(record["x"]), float(record["y"]),
+                component_x, component_y,
             )
             properties = record["properties"]
             for key in component.properties:
@@ -280,11 +302,14 @@ class DiagramControllerMixin:
             component.set_gauge_value(int(record["gauge_value"]))
             component.set_switch_position(int(record["switch_position"]))
             component.rotate(int(record.get("rotation", 0)) // 90)
+            component.scale_for_view(
+                self.canvas_zoom, component_x, component_y, self.canvas_zoom,
+            )
             component.set_custom_name(
                 str(record.get("name", "")),
                 self.localization.text(f"component_{kind}"),
             )
-            desired_x, desired_y = float(record["x"]), float(record["y"])
+            desired_x, desired_y = component_x, component_y
             actual_x, actual_y = self._component_position(component)
             component.move(desired_x - actual_x, desired_y - actual_y)
             component.set_detail(self._component_detail(component))
@@ -323,7 +348,8 @@ class DiagramControllerMixin:
                 if not isinstance(raw_nodes, list):
                     raise ValueError(self.localization.text("invalid_diagram"))
                 node_positions = [
-                    (float(node[0]), float(node[1])) for node in raw_nodes
+                    self._diagram_to_canvas_point(float(node[0]), float(node[1]))
+                    for node in raw_nodes
                 ]
                 color = str(record["color"])
                 wire = self._create_loaded_wire(
@@ -345,7 +371,12 @@ class DiagramControllerMixin:
         self._raise_wires_above_components()
         self._refresh_component_wire_panel()
         self._render_property_editor()
-        return missing_custom_switches
+        return (
+            missing_custom_switches,
+            unsupported_components,
+            unrestorable_wires,
+            defaulted_options,
+        )
 
     def _load_diagram(self) -> None:
         path = filedialog.askopenfilename(
@@ -362,7 +393,14 @@ class DiagramControllerMixin:
             return
         try:
             data = load_diagram(path)
-            missing_custom_switches = self._restore_diagram(data)
+            (
+                missing_custom_switches,
+                unsupported_components,
+                unrestorable_wires,
+                defaulted_options,
+            ) = self._restore_diagram(data)
+            self._reset_canvas_zoom()
+            self._reset_canvas_view()
             self._reset_history()
         except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
             messagebox.showerror(
@@ -371,14 +409,39 @@ class DiagramControllerMixin:
                 parent=self.root,
             )
             return
+        compatibility_messages: list[str] = []
         if missing_custom_switches:
-            messagebox.showwarning(
-                self.localization.text("missing_custom_switch_title"),
+            compatibility_messages.append(
                 self.localization.text("missing_custom_switch_load_message").format(
                     names="\n".join(
                         f"- {name}" for name in sorted(missing_custom_switches)
                     )
-                ),
+                )
+            )
+        if unsupported_components:
+            compatibility_messages.append(
+                self.localization.text("unsupported_component_load_message").format(
+                    names="\n".join(
+                        f"- {name}" for name in sorted(unsupported_components)
+                    )
+                )
+            )
+        if unrestorable_wires:
+            compatibility_messages.append(
+                self.localization.text("unrestorable_wire_load_message").format(
+                    ids=", ".join(str(wire_id) for wire_id in sorted(unrestorable_wires))
+                )
+            )
+        if defaulted_options:
+            compatibility_messages.append(
+                self.localization.text("defaulted_option_load_message").format(
+                    names="\n".join(f"- {name}" for name in sorted(defaulted_options))
+                )
+            )
+        if compatibility_messages:
+            messagebox.showwarning(
+                self.localization.text("diagram_compatibility_title"),
+                "\n\n".join(compatibility_messages),
                 parent=self.root,
             )
         self._mark_diagram_clean(path)
@@ -394,6 +457,8 @@ class DiagramControllerMixin:
             and self.current_diagram_path is None
             and not self._document_is_dirty()
         ):
+            self._reset_canvas_zoom()
+            self._reset_canvas_view()
             return
         if (self.components or self.wires) and not messagebox.askyesno(
             self.localization.text("new_diagram_confirm_title"),
@@ -402,6 +467,8 @@ class DiagramControllerMixin:
         ):
             return
         self.clear_canvas()
+        self._reset_canvas_zoom()
+        self._reset_canvas_view()
         self._reset_history()
         self.simulation.reset_results()
         self.simulation.status_key = "simulation_inactive"

@@ -72,6 +72,12 @@ def _component_terminal_names(
         }
     if switch_type == "toggle_3way":
         return {"toggle_A", "toggle_A_prime", "toggle_B", "toggle_B_prime"}
+    if switch_type == "super_switch_5way_4pole":
+        return {
+            f"super_{pole}{number}"
+            for pole in ("A", "B", "C", "D")
+            for number in range(6)
+        }
     return {"A0", "A1", "A2", "A3", "B0", "B1", "B2", "B3"}
 
 
@@ -84,7 +90,7 @@ def _validate_component_properties(
         required_properties.add(key)
         if "units" in field:
             required_properties.add(f"{key}_unit")
-    if set(properties) != required_properties:
+    if not required_properties.issubset(properties):
         raise _invalid()
 
     for field in COMPONENT_PROPERTY_SCHEMAS.get(kind, []):
@@ -106,6 +112,9 @@ def _validate_component_properties(
 def validate_diagram(
     data: dict[str, object], custom_switches: Mapping[str, object],
     missing_custom_switches: set[str] | None = None,
+    unsupported_components: set[str] | None = None,
+    unrestorable_wires: set[int] | None = None,
+    defaulted_options: set[str] | None = None,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     if not has_supported_envelope(data):
         raise DiagramValidationError("unsupported_diagram")
@@ -123,21 +132,57 @@ def validate_diagram(
     component_ids: set[int] = set()
     terminal_names_by_component_id: dict[int, set[str]] = {}
     for record in component_records:
-        if not isinstance(record, dict) or not component_fields.issubset(record):
-            raise _invalid()
-        if "name" in record and not isinstance(record["name"], str):
+        if not isinstance(record, dict) or not {"id", "kind"}.issubset(record):
             raise _invalid()
         component_id = _positive_integer(record["id"])
         if component_id in component_ids:
             raise _invalid()
         component_ids.add(component_id)
+        kind = str(record["kind"])
+        if kind not in COMPONENT_STYLES:
+            excluded_component_ids.add(component_id)
+            if unsupported_components is not None:
+                unsupported_components.add(kind)
+            continue
+        if not component_fields.issubset(record):
+            raise _invalid()
+        if "name" in record and not isinstance(record["name"], str):
+            raise _invalid()
         _finite_number(record["x"])
         _finite_number(record["y"])
         _bounded_integer(record["gauge_value"], 0, 100)
-        kind = str(record["kind"])
         properties = record["properties"]
-        if kind not in COMPONENT_STYLES or not isinstance(properties, dict):
+        if not isinstance(properties, dict):
             raise _invalid()
+        unsupported_choice: str | None = None
+        for field in COMPONENT_PROPERTY_SCHEMAS.get(kind, []):
+            key = str(field["key"])
+            if key not in properties:
+                continue
+            if field["type"] == "choice":
+                value = str(properties[key])
+                if kind == "switch" and value.startswith("custom:"):
+                    continue
+                if value not in field["choices"]:
+                    if key in {"pickup_type", "switch_type", "jack_type"}:
+                        unsupported_choice = value
+                        break
+                    properties[key] = field["default"]
+                    if defaulted_options is not None:
+                        defaulted_options.add(f"{kind} #{component_id}: {key}")
+            if (
+                "units" in field
+                and properties.get(f"{key}_unit") not in field["units"]
+            ):
+                properties[key] = field["default"]
+                properties[f"{key}_unit"] = field["default_unit"]
+                if defaulted_options is not None:
+                    defaulted_options.add(f"{kind} #{component_id}: {key}")
+        if unsupported_choice is not None:
+            excluded_component_ids.add(component_id)
+            if unsupported_components is not None:
+                unsupported_components.add(f"{kind}: {unsupported_choice}")
+            continue
         _validate_component_properties(kind, properties, custom_switches)
         if kind == "jack" and properties.get("jack_type") != "mono":
             raise _invalid()
@@ -161,7 +206,11 @@ def validate_diagram(
                     getattr(custom_switches[switch_type.removeprefix("custom:")], "positions")
                 )
             else:
-                max_position = 5 if switch_type == "blade_5way" else 3
+                max_position = (
+                    5
+                    if switch_type in ("blade_5way", "super_switch_5way_4pole")
+                    else 3
+                )
             _bounded_integer(record["switch_position"], 1, max_position)
         else:
             _bounded_integer(record["switch_position"], 1, 1)
@@ -199,12 +248,10 @@ def validate_diagram(
             component_id = _positive_integer(endpoint.get("component_id"))
             if component_id in excluded_component_ids:
                 return None
-            if (
-                component_id not in terminal_names_by_component_id
-                or endpoint.get("terminal")
-                not in terminal_names_by_component_id[component_id]
-            ):
+            if component_id not in terminal_names_by_component_id:
                 raise _invalid()
+            if endpoint.get("terminal") not in terminal_names_by_component_id[component_id]:
+                return -1
             return None
         if endpoint_type == "wire_node":
             wire_id = _positive_integer(endpoint.get("wire_id"))
@@ -220,6 +267,7 @@ def validate_diagram(
         raise _invalid()
 
     excluded_wire_ids: set[int] = set()
+    terminal_incompatible_wire_ids: set[int] = set()
     changed = True
     while changed:
         changed = False
@@ -233,9 +281,15 @@ def validate_diagram(
                     endpoint.get("type") == "terminal"
                     and endpoint.get("component_id") in excluded_component_ids
                 ) or (
+                    dependency == -1
+                ) or (
                     dependency is not None and dependency in excluded_wire_ids
                 ):
                     excluded_wire_ids.add(wire_id)
+                    if dependency == -1 or dependency in terminal_incompatible_wire_ids:
+                        terminal_incompatible_wire_ids.add(wire_id)
+                        if unrestorable_wires is not None:
+                            unrestorable_wires.add(wire_id)
                     changed = True
                     break
 

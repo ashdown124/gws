@@ -49,7 +49,8 @@ COMPONENT_PROPERTY_SCHEMAS = {
     "capacitor": [{"key": "capacitance", "label": "property_capacitance", "type": "number",
                    "default": "47", "units": ["pF", "nF", "µF"], "default_unit": "nF"}],
     "switch": [{"key": "switch_type", "label": "property_switch_type", "type": "choice",
-                "choices": ["blade_3way", "blade_5way", "toggle_3way"],
+                "choices": ["blade_3way", "blade_5way", "toggle_3way",
+                            "super_switch_5way_4pole"],
                 "default": "blade_3way"}],
     # Keep the mono value in diagram data for format compatibility, but it is
     # not user-configurable while only one jack implementation exists.
@@ -57,7 +58,9 @@ COMPONENT_PROPERTY_SCHEMAS = {
               "choices": ["mono"], "default": "mono", "hidden": True}],
 }
 
-BUILTIN_SWITCH_TYPES = ("blade_3way", "blade_5way", "toggle_3way")
+BUILTIN_SWITCH_TYPES = (
+    "blade_3way", "blade_5way", "toggle_3way", "super_switch_5way_4pole",
+)
 CUSTOM_SWITCH_DEFINITIONS: dict[str, CustomSwitchDefinition] = {}
 CONTROL_ICON_DIR = Path(__file__).resolve().parent / "assets" / "icons"
 
@@ -110,6 +113,9 @@ TOGGLE_SWITCH_ACTIVE_TERMINALS = {
     3: {"B", "B_prime"},
 }
 
+SUPER_SWITCH_TYPE = "super_switch_5way_4pole"
+SUPER_SWITCH_POLES = ("A", "B", "C", "D")
+
 
 class CanvasComponent(ComponentSymbolRenderer):
     """A movable component drawn as one tagged Canvas item group."""
@@ -140,6 +146,7 @@ class CanvasComponent(ComponentSymbolRenderer):
         self.blade_symbol_tag = f"blade_symbol_{component_id}"
         self.toggle_symbol_tag = f"toggle_symbol_{component_id}"
         self.toggle_lever_tag = f"toggle_lever_{component_id}"
+        self.super_switch_symbol_tag = f"super_switch_symbol_{component_id}"
         self.custom_symbol_tag = f"custom_switch_symbol_{component_id}"
         self.custom_connection_tag = f"custom_switch_connection_{component_id}"
         self.custom_switch_definition: CustomSwitchDefinition | None = None
@@ -154,6 +161,12 @@ class CanvasComponent(ComponentSymbolRenderer):
         self.selected = False
         self.custom_name = ""
         self.rotation = 0
+        self.display_scale = 1.0
+        self._visual_scale_stack: list[float] = []
+        self._base_stroke_widths: dict[int, float] = {}
+        self._base_arrow_shapes: dict[int, tuple[float, float, float]] = {}
+        self._zoom_suppressed_text: dict[int, str] = {}
+        self.external_text_visible = True
         self._draw(label, x, y)
 
     def _draw(self, label: str, x: float, y: float) -> None:
@@ -200,6 +213,7 @@ class CanvasComponent(ComponentSymbolRenderer):
         elif self.kind == "switch":
             self._draw_blade_switch_symbol(x, y)
             self._draw_toggle_switch_symbol(x, y)
+            self._draw_super_switch_symbol(x, y)
         elif self.kind == "resistor":
             self._draw_resistor_symbol(x1, x2, x, y)
         elif self.kind == "capacitor":
@@ -474,11 +488,82 @@ class CanvasComponent(ComponentSymbolRenderer):
         self._position_rename_control()
 
     def rotate(self, quarter_turns: int) -> None:
-        self._rotate_geometry(quarter_turns)
-        self.rotation = (self.rotation + quarter_turns * 90) % 360
-        self._fit_hitbox_to_visible_geometry()
+        previous_rotation = self._begin_visual_update()
+        self.rotation = (previous_rotation + quarter_turns * 90) % 360
+        self._end_visual_update(self.rotation)
+
+    def _apply_display_stroke_scale(self, scale: float) -> None:
+        for item in self.canvas.find_withtag(self.tag):
+            tags = self.canvas.gettags(item)
+            if "ui_overlay" in tags:
+                continue
+            if self.canvas.type(item) not in ("line", "oval", "rectangle", "polygon"):
+                continue
+            if item not in self._base_stroke_widths:
+                try:
+                    self._base_stroke_widths[item] = float(
+                        self.canvas.itemcget(item, "width")
+                    )
+                except (tk.TclError, ValueError):
+                    continue
+            width = max(1, math.floor(self._base_stroke_widths[item] * scale + 0.5))
+            self.canvas.itemconfigure(item, width=width)
+            if (
+                self.canvas.type(item) == "line"
+                and self.canvas.itemcget(item, "arrow") != "none"
+            ):
+                if item not in self._base_arrow_shapes:
+                    try:
+                        shape = tuple(
+                            float(value)
+                            for value in self.canvas.itemcget(item, "arrowshape").split()
+                        )
+                    except ValueError:
+                        continue
+                    if len(shape) != 3:
+                        continue
+                    self._base_arrow_shapes[item] = shape
+                self.canvas.itemconfigure(
+                    item,
+                    arrowshape=tuple(
+                        max(1, math.floor(value * scale + 0.5))
+                        for value in self._base_arrow_shapes[item]
+                    ),
+                )
+
+    def _scale_geometry(
+        self, factor: float, pivot_x: float, pivot_y: float, target_scale: float,
+    ) -> None:
+        self.canvas.scale(self.tag, pivot_x, pivot_y, factor, factor)
+        if self.hitbox_bounds is not None:
+            x1, y1, x2, y2 = self.hitbox_bounds
+            self.hitbox_bounds = (
+                pivot_x + (x1 - pivot_x) * factor,
+                pivot_y + (y1 - pivot_y) * factor,
+                pivot_x + (x2 - pivot_x) * factor,
+                pivot_y + (y2 - pivot_y) * factor,
+            )
+        self._apply_display_stroke_scale(target_scale)
+        self._position_external_terminal_labels()
+        self._position_external_text()
+        self._position_rotation_controls()
+        self._position_rename_control()
+
+    def scale_for_view(
+        self, factor: float, pivot_x: float, pivot_y: float, new_scale: float,
+    ) -> None:
+        self._scale_geometry(factor, pivot_x, pivot_y, new_scale)
+        self.display_scale = new_scale
+        self._apply_zoom_text_visibility()
 
     def _begin_visual_update(self) -> int:
+        scale = self.display_scale
+        self._visual_scale_stack.append(scale)
+        if scale != 1.0 and self.hitbox_bounds is not None:
+            x1, y1, x2, y2 = self.hitbox_bounds
+            center_x, center_y = (x1 + x2) / 2, (y1 + y2) / 2
+            self._scale_geometry(1.0 / scale, center_x, center_y, 1.0)
+            self.display_scale = 1.0
         rotation = self.rotation
         if rotation:
             self._rotate_geometry(-(rotation // 90))
@@ -490,6 +575,13 @@ class CanvasComponent(ComponentSymbolRenderer):
             self._rotate_geometry(rotation // 90)
             self.rotation = rotation
         self._fit_hitbox_to_visible_geometry()
+        scale = self._visual_scale_stack.pop() if self._visual_scale_stack else 1.0
+        if scale != 1.0 and self.hitbox_bounds is not None:
+            x1, y1, x2, y2 = self.hitbox_bounds
+            center_x, center_y = (x1 + x2) / 2, (y1 + y2) / 2
+            self._scale_geometry(scale, center_x, center_y, scale)
+        self.display_scale = scale
+        self._apply_zoom_text_visibility()
 
 
 
@@ -501,6 +593,7 @@ class CanvasComponent(ComponentSymbolRenderer):
 
     def set_label(self, label: str) -> None:
         self.canvas.itemconfigure(self.label_tag, text=label)
+        self._apply_zoom_text_visibility()
 
     def set_custom_name(self, name: str, default_label: str) -> None:
         self.custom_name = name.strip()
@@ -508,6 +601,7 @@ class CanvasComponent(ComponentSymbolRenderer):
 
     def set_detail(self, detail: str) -> None:
         self.canvas.itemconfigure(self.detail_tag, text=f"#{self.component_id} · {detail}")
+        self._apply_zoom_text_visibility()
 
     def set_gauge_value(self, value: int) -> None:
         rotation = self._begin_visual_update()
@@ -536,21 +630,28 @@ class CanvasComponent(ComponentSymbolRenderer):
         if self.kind == "switch":
             switch_type = self.properties["switch_type"]
             is_toggle = switch_type == "toggle_3way"
+            is_super = switch_type == SUPER_SWITCH_TYPE
             is_custom = switch_type.startswith("custom:")
             self.canvas.itemconfigure(
                 self.blade_symbol_tag,
-                state="hidden" if is_toggle or is_custom else "normal",
+                state="hidden" if is_toggle or is_super or is_custom else "normal",
             )
             self.canvas.itemconfigure(
                 self.toggle_symbol_tag, state="normal" if is_toggle else "hidden"
+            )
+            self.canvas.itemconfigure(
+                self.super_switch_symbol_tag, state="normal" if is_super else "hidden"
             )
             if is_custom:
                 switch_id = switch_type.removeprefix("custom:")
                 self._show_custom_switch(CUSTOM_SWITCH_DEFINITIONS[switch_id])
             else:
                 self._clear_custom_switch()
-                self._set_switch_visual_bounds(160 if is_toggle else 190,
-                                               180 if is_toggle else 220)
+                if is_super:
+                    self._set_switch_visual_bounds(330, 155)
+                else:
+                    self._set_switch_visual_bounds(160 if is_toggle else 190,
+                                                   180 if is_toggle else 220)
             self.set_switch_position(self.switch_position)
             self._end_visual_update(rotation)
             return
@@ -575,7 +676,7 @@ class CanvasComponent(ComponentSymbolRenderer):
             definition = CUSTOM_SWITCH_DEFINITIONS[switch_type.removeprefix("custom:")]
             max_position = len(definition.positions)
         else:
-            max_position = 5 if switch_type == "blade_5way" else 3
+            max_position = 5 if switch_type in ("blade_5way", SUPER_SWITCH_TYPE) else 3
         self.switch_position = max(1, min(max_position, int(position)))
         if switch_type.startswith("custom:"):
             position_definition = definition.positions[self.switch_position - 1]
@@ -587,6 +688,21 @@ class CanvasComponent(ComponentSymbolRenderer):
             self.active_switch_terminals = set(
                 TOGGLE_SWITCH_ACTIVE_TERMINALS[self.switch_position]
             )
+        elif switch_type == SUPER_SWITCH_TYPE:
+            self.active_switch_terminals = {
+                terminal
+                for pole in SUPER_SWITCH_POLES
+                for terminal in (f"{pole}0", f"{pole}{self.switch_position}")
+            }
+            for pole in SUPER_SWITCH_POLES:
+                for number in range(6):
+                    terminal_name = f"{pole}{number}"
+                    self.canvas.itemconfigure(
+                        f"super_switch_terminal_{terminal_name}_{self.component_id}",
+                        fill="#f59e0b"
+                        if terminal_name in self.active_switch_terminals
+                        else "#ffffff",
+                    )
         else:
             self.active_switch_terminals = set(
                 BLADE_SWITCH_ACTIVE_TERMINALS[switch_type][self.switch_position]
@@ -627,7 +743,7 @@ class CanvasComponent(ComponentSymbolRenderer):
         self._end_visual_update(rotation)
 
     def active_switch_groups(self) -> dict[str, set[str]]:
-        """Return isolated A-side and B-side active contact groups for simulation."""
+        """Return the switch's isolated active contact groups for simulation."""
         if self.properties["switch_type"] == "toggle_3way":
             groups: dict[str, set[str]] = {}
             if {"A", "A_prime"} <= self.active_switch_terminals:
@@ -635,6 +751,11 @@ class CanvasComponent(ComponentSymbolRenderer):
             if {"B", "B_prime"} <= self.active_switch_terminals:
                 groups["B"] = {"B", "B_prime"}
             return groups
+        if self.properties["switch_type"] == SUPER_SWITCH_TYPE:
+            return {
+                pole: {f"{pole}0", f"{pole}{self.switch_position}"}
+                for pole in SUPER_SWITCH_POLES
+            }
         if self.properties["switch_type"].startswith("custom:"):
             definition = CUSTOM_SWITCH_DEFINITIONS[
                 self.properties["switch_type"].removeprefix("custom:")
@@ -663,6 +784,24 @@ class CanvasComponent(ComponentSymbolRenderer):
                 for name, item in self.terminals.items()
                 if name.startswith("toggle_")
             }
+        if self.kind == "switch":
+            switch_type = self.properties["switch_type"]
+            if switch_type == SUPER_SWITCH_TYPE:
+                return {
+                    name.removeprefix("super_"): item
+                    for name, item in self.terminals.items()
+                    if name.startswith("super_")
+                }
+            else:
+                valid_names = {
+                    f"{pole}{number}"
+                    for pole in ("A", "B")
+                    for number in range(4)
+                }
+                return {
+                    name: item for name, item in self.terminals.items()
+                    if name in valid_names
+                }
         if self.kind != "pickup":
             return dict(self.terminals)
         if self.properties["pickup_type"] == "humbucker":
@@ -707,11 +846,59 @@ class CanvasComponent(ComponentSymbolRenderer):
         if selected:
             self.canvas.tag_raise(f"rotation_controls_{self.component_id}")
             self.canvas.tag_raise(self.rename_control_tag)
+        self._apply_zoom_text_visibility()
 
     def set_external_text_visible(self, visible: bool) -> None:
+        self.external_text_visible = visible
         state = "normal" if visible else "hidden"
         self.canvas.itemconfigure(self.label_tag, state=state)
         self.canvas.itemconfigure(self.detail_tag, state=state)
+        self._apply_zoom_text_visibility()
+
+    def _apply_zoom_text_visibility(self) -> None:
+        """Reduce label density while zoomed out without altering symbol state."""
+        for item, original_text in tuple(self._zoom_suppressed_text.items()):
+            if not self.canvas.type(item):
+                continue
+            # A visual update may have replaced the text while it was suppressed.
+            # Preserve that newer value instead of restoring stale text.
+            if self.canvas.itemcget(item, "text") == "":
+                self.canvas.itemconfigure(item, text=original_text)
+        self._zoom_suppressed_text.clear()
+
+        if self.selected or self.display_scale >= 0.8:
+            return
+
+        tags_to_suppress = [
+            self.detail_tag,
+            self.switch_position_text_tag,
+            self.gauge_text_tag,
+        ]
+        if self.display_scale <= 0.5:
+            tags_to_suppress.append("terminal_label")
+        elif self.kind == "switch":
+            # At intermediate zoom, keep only the switch's main external labels.
+            dense_labels = set(self.canvas.find_withtag("terminal_label"))
+            dense_labels.intersection_update(self.canvas.find_withtag(self.tag))
+            dense_labels.difference_update(self.external_terminal_labels.values())
+            dense_labels.difference_update(
+                self.canvas.find_withtag("major_terminal_label")
+            )
+            for item in dense_labels:
+                self._suppress_text_item(item)
+
+        for tag in tags_to_suppress:
+            for item in self.canvas.find_withtag(tag):
+                if self.tag in self.canvas.gettags(item):
+                    self._suppress_text_item(item)
+
+    def _suppress_text_item(self, item: int) -> None:
+        if self.canvas.type(item) != "text":
+            return
+        text = self.canvas.itemcget(item, "text")
+        if text:
+            self._zoom_suppressed_text[item] = text
+            self.canvas.itemconfigure(item, text="")
 
     def delete(self) -> None:
         self.canvas.delete(self.tag)

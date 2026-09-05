@@ -299,14 +299,22 @@ class AppUIMixin:
 
         canvas_frame = tk.Frame(self.root, bg="#111821", padx=12, pady=12)
         canvas_frame.pack(side="left", fill="both", expand=True)
+        status_frame = tk.Frame(canvas_frame, bg="#111821")
+        status_frame.pack(side="bottom", fill="x")
         self.status_bar = tk.Label(
-            canvas_frame, bg="#111821", fg="#cbd5e1", anchor="w",
+            status_frame, bg="#111821", fg="#cbd5e1", anchor="w",
             padx=4, pady=3, font=("Malgun Gothic", 9),
         )
-        self.status_bar.pack(side="bottom", fill="x")
+        self.status_bar.pack(side="left", fill="x", expand=True)
+        self.canvas_zoom_label = tk.Label(
+            status_frame, text="100%", bg="#111821", fg="#cbd5e1", anchor="e",
+            padx=4, pady=3, font=("Arial", 9, "bold"),
+        )
+        self.canvas_zoom_label.pack(side="right")
         self.canvas = tk.Canvas(canvas_frame, bg="#f5f7fa", highlightthickness=0, cursor="arrow")
         self.canvas.pack(side="top", fill="both", expand=True)
         self.wire_mode_indicator = self.canvas.create_text(
             0, 0, anchor="se", fill="#2563eb", font=("Malgun Gothic", 13, "bold"),
             state="hidden", tags=("ui_overlay",),
         )
+        self._reset_canvas_view()

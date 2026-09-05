@@ -312,6 +312,62 @@ class ComponentSymbolRenderer:
                   self.toggle_symbol_tag, self.tag),
         )
         self.canvas.itemconfigure(self.toggle_symbol_tag, state="hidden")
+
+    def _draw_super_switch_symbol(self, x: float, y: float) -> None:
+        common_tags = (
+            "component", "component_body", self.super_switch_symbol_tag, self.tag,
+        )
+        self.canvas.create_rectangle(
+            x - 148, y - 43, x + 148, y + 43,
+            fill="#e5e7eb", outline="#202936", width=3, tags=common_tags,
+        )
+        pole_specs = (
+            ("A", x - 126, y - 20, 1, "#16a34a"),
+            ("B", x + 126, y - 20, -1, "#ea580c"),
+            ("C", x - 126, y + 20, 1, "#2563eb"),
+            ("D", x + 126, y + 20, -1, "#7c3aed"),
+        )
+        for pole, common_x, terminal_y, direction, color in pole_specs:
+            self.canvas.create_text(
+                common_x, terminal_y - 15, text=pole, fill=color,
+                font=("Arial", 8, "bold"),
+                tags=(
+                    "component", "terminal_label", "major_terminal_label",
+                    self.super_switch_symbol_tag, self.tag,
+                ),
+            )
+            for number in range(6):
+                if direction > 0 or number == 0:
+                    terminal_x = common_x + direction * number * 21
+                else:
+                    terminal_x = common_x - (6 - number) * 21
+                terminal_name = f"{pole}{number}"
+                terminal = self.canvas.create_oval(
+                    terminal_x - 7, terminal_y - 7,
+                    terminal_x + 7, terminal_y + 7,
+                    fill="#ffffff", outline=color, width=3,
+                    tags=(
+                        "component", "terminal",
+                        f"super_switch_terminal_{terminal_name}_{self.component_id}",
+                        self.super_switch_symbol_tag, self.tag,
+                    ),
+                )
+                self.terminals[f"super_{terminal_name}"] = terminal
+                self.canvas.create_text(
+                    terminal_x, terminal_y, text=str(number), fill="#202936",
+                    font=("Arial", 6, "bold"),
+                    tags=(
+                        "component", "terminal_label",
+                        self.super_switch_symbol_tag, self.tag,
+                    ),
+                )
+        self.canvas.create_text(
+            x, y + 57, text="P1/5", fill="#202936", font=("Arial", 10, "bold"),
+            tags=("component", self.switch_position_text_tag,
+                  self.super_switch_symbol_tag, self.tag),
+        )
+        self.canvas.itemconfigure(self.super_switch_symbol_tag, state="hidden")
+
     def _clear_custom_switch(self) -> None:
         self.canvas.delete(self.custom_symbol_tag)
         for name in [name for name in self.terminals if name.startswith("custom_")]:

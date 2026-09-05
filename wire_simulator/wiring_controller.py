@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .editor_models import WIRE_NODE_RADIUS, WireConnection
+from .editor_models import WireConnection
 
 
 class WiringControllerMixin:
@@ -35,12 +35,15 @@ class WiringControllerMixin:
                 self.draft_wire_node_positions,
                 self.draft_wire_cursor_position,
             ),
-            fill="#2563eb", width=3, joinstyle="round", tags=("wire", "wire_preview")))
+            fill="#2563eb", width=self._scaled_canvas_size(3),
+            joinstyle="round", tags=("wire", "wire_preview")))
+        node_radius = self._wire_node_display_radius()
         for x, y in self.draft_wire_node_positions:
             self.wire_preview_canvas_ids.append(self.canvas.create_oval(
-                x-WIRE_NODE_RADIUS, y-WIRE_NODE_RADIUS,
-                x+WIRE_NODE_RADIUS, y+WIRE_NODE_RADIUS,
-                fill="#2563eb", outline="#ffffff", width=1,
+                x-node_radius, y-node_radius,
+                x+node_radius, y+node_radius,
+                fill="#2563eb", outline="#ffffff",
+                width=self._scaled_canvas_size(1),
                 tags=("wire", "wire_preview", "wire_node")))
         self._raise_wires_above_components()
 
@@ -53,14 +56,18 @@ class WiringControllerMixin:
             self.draft_wire_node_positions,
             self._endpoint_center(end_endpoint),
         )
-        highlight_canvas_id = self.canvas.create_line(*points, fill="#f59e0b", width=9,
+        highlight_canvas_id = self.canvas.create_line(
+            *points, fill="#f59e0b", width=self._scaled_canvas_size(9),
             joinstyle="round", state="hidden", tags=("wire", "wire_highlight"))
-        line_canvas_id = self.canvas.create_line(*points, fill="#2563eb", width=3,
+        line_canvas_id = self.canvas.create_line(
+            *points, fill="#2563eb", width=self._scaled_canvas_size(3),
             joinstyle="round", tags=("wire",))
+        node_radius = self._wire_node_display_radius()
         node_canvas_ids = [self.canvas.create_oval(
-            x-WIRE_NODE_RADIUS, y-WIRE_NODE_RADIUS,
-            x+WIRE_NODE_RADIUS, y+WIRE_NODE_RADIUS, fill="#2563eb",
-            outline="#ffffff", width=1, tags=("wire", "wire_node"))
+            x-node_radius, y-node_radius,
+            x+node_radius, y+node_radius, fill="#2563eb",
+            outline="#ffffff", width=self._scaled_canvas_size(1),
+            tags=("wire", "wire_node"))
             for x, y in self.draft_wire_node_positions
         ]
         self.wires.append(WireConnection(
@@ -138,13 +145,17 @@ class WiringControllerMixin:
         self._select_wire(wire)
         self.canvas.itemconfigure(wire.highlight_canvas_id, state="hidden")
         self.selected_wire_node_ref = (wire, node_canvas_id)
-        self.canvas.itemconfigure(node_canvas_id, outline="#f59e0b", width=3)
+        self.canvas.itemconfigure(
+            node_canvas_id, outline="#f59e0b", width=self._scaled_canvas_size(3)
+        )
 
     def _clear_wire_node_selection(self):
         if self.selected_wire_node_ref is not None:
             _wire, node_canvas_id = self.selected_wire_node_ref
             if self.canvas.type(node_canvas_id):
-                self.canvas.itemconfigure(node_canvas_id, outline="#ffffff", width=1)
+                self.canvas.itemconfigure(
+                    node_canvas_id, outline="#ffffff", width=self._scaled_canvas_size(1)
+                )
         self.selected_wire_node_ref = None
 
     def _clear_wire_selection(self):
@@ -281,6 +292,7 @@ class WiringControllerMixin:
         ]
 
     def _move_wire_node_positions(self, wires, dx, dy):
+        node_radius = self._wire_node_display_radius()
         for wire in wires:
             wire.node_positions = [
                 (x + dx, y + dy) for x, y in wire.node_positions
@@ -290,8 +302,8 @@ class WiringControllerMixin:
             ):
                 self.canvas.coords(
                     node_canvas_id,
-                    x - WIRE_NODE_RADIUS, y - WIRE_NODE_RADIUS,
-                    x + WIRE_NODE_RADIUS, y + WIRE_NODE_RADIUS,
+                    x - node_radius, y - node_radius,
+                    x + node_radius, y + node_radius,
                 )
 
     def _rotate_selection(self, pivot_tag, quarter_turns):
@@ -326,13 +338,14 @@ class WiringControllerMixin:
                     x, y = pivot_x - (y - pivot_y), pivot_y + (x - pivot_x)
                 rotated_nodes.append((x, y))
             wire.node_positions = rotated_nodes
+            node_radius = self._wire_node_display_radius()
             for node_canvas_id, (x, y) in zip(
                 wire.node_canvas_ids, wire.node_positions
             ):
                 self.canvas.coords(
                     node_canvas_id,
-                    x - WIRE_NODE_RADIUS, y - WIRE_NODE_RADIUS,
-                    x + WIRE_NODE_RADIUS, y + WIRE_NODE_RADIUS,
+                    x - node_radius, y - node_radius,
+                    x + node_radius, y + node_radius,
                 )
         self._update_all_wire_geometry()
 

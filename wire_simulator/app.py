@@ -107,6 +107,9 @@ class WireSimulatorApp(
         self.show_component_labels = tk.BooleanVar(value=True)
         self.current_diagram_path: str | None = None
         self.saved_diagram_snapshot: dict[str, object] | None = None
+        self.canvas_zoom = 1.0
+        self.canvas_zoom_offset_x = 0.0
+        self.canvas_zoom_offset_y = 0.0
         self._configure_style()
         self._build_ui()
         self._bind_events()
